@@ -1,13 +1,11 @@
 /**
- * TypeScript / JavaScript annotation parser
- * - Looks for JSDoc comments containing @funeral { ... }
- * - Extracts expiry, reason, migration, ticket
- * - Attempts to find the function / class name that follows the JSDoc
+ * TypeScript / JavaScript annotation parser using tree-sitter when available.
  *
- * We prefer a simple, robust approach: regex to locate the JSDoc and heuristics
- * to find the next identifier. In a production implementation we'd use
- * tree-sitter for full AST reliability; this parser is written to be readable
- * and safe and to satisfy the initial project scaffolding.
+ * This implementation will try to use tree-sitter and the official
+ * tree-sitter-typescript grammar to find comment nodes containing
+ * `@funeral` and then locate the following function / class node to
+ * extract the identifier and location. If tree-sitter is not available
+ * it falls back to the original regex-based heuristic.
  */
 
 import * as fs from 'fs';
@@ -25,14 +23,13 @@ export interface BuriedItem {
   author?: string;
 }
 
-// Helper to extract fields using simple regexes from a JSDoc-like block
 function extractFields(block: string) {
   const pick = (key: string) => {
-    const re = new RegExp(key + '\\s*[:=]\\s*["']([^"']+)["']', 'i');
+    const pattern = `${key}\\s*[:=]\\s*["']([^"']+)["']`;
+    const re = new RegExp(pattern, 'i');
     const m = block.match(re);
     return m ? m[1] : undefined;
   };
-
   const expiry = pick('expiry');
   const reason = pick('reason');
   const migration = pick('migration');
@@ -40,78 +37,121 @@ function extractFields(block: string) {
   return { expiry, reason, migration, ticket };
 }
 
-// Find a name for the next top-level function/class/const after a position
-function findFollowingName(source: string, idx: number) {
-  const after = source.slice(idx);
-  // Try function declaration: function name(
-  const fnDecl = after.match(/function\s+([A-Za-z0-9_\$]+)\s*\(/);
-  if (fnDecl) return fnDecl[1];
-
-  // Try export function
-  const expFn = after.match(/export\s+function\s+([A-Za-z0-9_\$]+)\s*\(/);
-  if (expFn) return expFn[1];
-
-  // Try const name = ( or = async (
-  const constDecl = after.match(/(?:const|let|var)\s+([A-Za-z0-9_\$]+)\s*=\s*(?:async\s*)?[\(\w]/);
-  if (constDecl) return constDecl[1];
-
-  // Try class declaration
-  const classDecl = after.match(/class\s+([A-Za-z0-9_\$]+)/);
-  if (classDecl) return classDecl[1];
-
-  // Fallback: attempt to read an exported default identifier
-  const defaultExport = after.match(/export\s+default\s+function\s+([A-Za-z0-9_\$]+)/);
-  if (defaultExport) return defaultExport[1];
-
-  return 'unknown';
-}
-
-/**
- * Parse a TypeScript / JavaScript source file and return any buried items.
- * @param filePath absolute or relative path
- */
-export function parseFile(filePath: string): BuriedItem[] {
+// Fallback simple parser (previous heuristic) kept for environments without tree-sitter
+function fallbackParse(filePath: string): BuriedItem[] {
   const abs = path.resolve(filePath);
   const src = fs.readFileSync(abs, 'utf8');
-
   const results: BuriedItem[] = [];
-
-  // Regex to find JSDoc comment blocks
   const jsdocRe = /\/\*\*[\s\S]*?\*\//g;
   let m: RegExpExecArray | null;
   while ((m = jsdocRe.exec(src))) {
     const block = m[0];
     if (/\@funeral\b/i.test(block)) {
-      // Extract fields
       const { expiry, reason, migration, ticket } = extractFields(block);
-      // Determine line number where comment starts
       const startIndex = m.index;
       const lineNumber = src.slice(0, startIndex).split('\n').length;
-
-      // Find the identifier that follows the comment
-      const functionName = findFollowingName(src, m.index + m[0].length);
-
-      // Parse expiry date defensively
+      const after = src.slice(m.index + m[0].length);
+      const fnDecl = after.match(/function\s+([A-Za-z0-9_\$]+)\s*\(/) || after.match(/class\s+([A-Za-z0-9_\$]+)/) || after.match(/(?:const|let|var)\s+([A-Za-z0-9_\$]+)\s*=/);
+      const functionName = fnDecl ? fnDecl[1] : 'unknown';
       let expiryDate: Date = new Date(NaN);
       if (expiry) {
         const d = new Date(expiry);
         if (!isNaN(d.getTime())) expiryDate = d;
       }
-
-      results.push({
-        filePath: abs,
-        lineNumber,
-        functionName,
-        language: filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? 'typescript' : 'javascript',
-        expiry: expiryDate,
-        reason: reason || '',
-        migration: migration,
-        ticket: ticket,
-      });
+      results.push({ filePath: abs, lineNumber, functionName, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
     }
   }
-
   return results;
+}
+
+export function parseFile(filePath: string): BuriedItem[] {
+  // Try to require tree-sitter and the typescript grammar
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Parser = require('tree-sitter');
+    // tree-sitter-typescript exposes two grammars; prefer 'typescript'
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx;
+
+    const abs = path.resolve(filePath);
+    const src = fs.readFileSync(abs, 'utf8');
+    const parser = new Parser();
+    parser.setLanguage(TsGrammar);
+    const tree = parser.parse(src);
+    const cursor = tree.walk();
+
+    const results: BuriedItem[] = [];
+
+    // Walk all comment nodes and look for @funeral
+    const visit = (node: any) => {
+      if (!node) return;
+      if (node.type === 'comment') {
+        const text = src.slice(node.startIndex, node.endIndex);
+        if (/\@funeral\b/i.test(text)) {
+          const { expiry, reason, migration, ticket } = extractFields(text);
+          // find next sibling or following node to determine the function/class name
+          let follow = node.nextSibling;
+          // if not found, walk upward to parent and try nextSibling
+          let parent = node.parent;
+          while (!follow && parent) {
+            follow = parent.nextSibling;
+            parent = parent.parent;
+          }
+
+          // If still not found, try to find the next node in tree traversal
+          if (!follow) {
+            const all = tree.rootNode.descendantsOfType ? tree.rootNode.descendantsOfType('*') : null;
+          }
+
+          let name = 'unknown';
+          let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
+
+          if (follow) {
+            // check for function_declaration, method_definition, class_declaration, variable_declaration
+            const t = follow.type;
+            if (t === 'function_declaration' && follow.childForFieldName) {
+              const id = follow.childForFieldName('name');
+              if (id) name = src.slice(id.startIndex, id.endIndex);
+            } else if (t === 'class_declaration') {
+              const id = follow.childForFieldName('name');
+              if (id) name = src.slice(id.startIndex, id.endIndex);
+            } else if (t === 'lexical_declaration' || t === 'variable_declaration') {
+              // find identifier child
+              const id = follow.namedChildren && follow.namedChildren.find((c: any) => c.type === 'identifier');
+              if (id) name = src.slice(id.startIndex, id.endIndex);
+            } else if (t === 'export_statement') {
+              // try to look into export next
+              const child = follow.namedChildren && follow.namedChildren[0];
+              if (child && child.type === 'function_declaration') {
+                const id = child.childForFieldName && child.childForFieldName('name');
+                if (id) name = src.slice(id.startIndex, id.endIndex);
+              }
+            }
+          }
+
+          let expiryDate: Date = new Date(NaN);
+          if (expiry) {
+            const d = new Date(expiry);
+            if (!isNaN(d.getTime())) expiryDate = d;
+          }
+
+          results.push({ filePath: abs, lineNumber, functionName: name, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
+        }
+      }
+
+      // visit children
+      if (node.namedChildren && node.namedChildren.length) {
+        for (const c of node.namedChildren) visit(c);
+      }
+    };
+
+    visit(tree.rootNode);
+    return results;
+  } catch (err) {
+    // If tree-sitter not available or parsing fails, fall back
+    console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
+    return fallbackParse(filePath);
+  }
 }
 
 export default { parseFile };

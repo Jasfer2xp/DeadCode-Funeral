@@ -1,0 +1,37 @@
+{
+  "name": "deadcode-funeral-vscode",
+  "displayName": "DeadCode Funeral",
+  "publisher": "your-name",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "activationEvents": [
+    "onCommand:deadcode-funeral.scanWorkspace",
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "onLanguage:csharp",
+    "onLanguage:python"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "deadcode-funeral.scanWorkspace",
+        "title": "DeadCode Funeral: Scan Workspace"
+      }
+    ]
+    ,
+    "configuration": {
+      "type": "object",
+      "title": "DeadCode Funeral",
+      "properties": {
+        "deadcodeFuneral.githubToken": {
+          "type": "string",
+          "description": "GitHub token used by the extension to open PRs (optional). Set as a secret in settings.",
+          "default": ""
+        }
+      }
+    }
+  },
+  "main": "./out/extension.js",
+  "devDependencies": {}
+}

@@ -1,0 +1,17 @@
+import { parseFile } from '../src/scanner/parsers/typescript';
+import * as fs from 'fs';
+
+describe('TypeScript/tree-sitter parser', () => {
+  test('finds @funeral JSDoc and extracts fields', () => {
+    const tmp = 'tmp_tree_sitter_test.ts';
+    const content = `/**\n * @funeral {\n *   expiry: "2025-09-01",\n *   reason: "Use v2"\n * }\n */\nexport function oldThing() { return 1; }`;
+    fs.writeFileSync(tmp, content);
+    const items = parseFile(tmp);
+    fs.unlinkSync(tmp);
+    expect(items.length).toBeGreaterThanOrEqual(1);
+    const it = items[0];
+    expect(it.functionName).toBeDefined();
+    expect(it.reason).toMatch(/Use v2/);
+    expect(it.expiry instanceof Date).toBeTruthy();
+  });
+});

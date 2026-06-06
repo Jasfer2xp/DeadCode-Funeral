@@ -7,7 +7,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
-import glob from 'glob';
+import * as glob from 'glob';
 
 export interface UsageResult {
   isUsed: boolean;
@@ -23,7 +23,8 @@ export function checkUsage(root: string, definingFile: string, functionName: str
 
   const usages: string[] = [];
 
-  const nameRe = new RegExp('\\\b' + functionName.replace(/[$^*+?.()|[\]{}\\]/g, '\\$&') + '\\s*\\(', 'g');
+    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
+    const nameRe = new RegExp(`\\b${escapeRegExp(functionName)}\\s*\\(`, 'g');
 
   for (const file of files) {
     if (path.resolve(file) === path.resolve(definingFile)) continue;

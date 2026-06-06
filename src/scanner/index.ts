@@ -7,7 +7,8 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
-import glob from 'glob';
+import * as glob from 'glob';
+import { execSync } from 'child_process';
 
 import * as tsParser from './parsers/typescript';
 import * as jsParser from './parsers/javascript';
@@ -52,6 +53,40 @@ export function scan(options: ScanOptions = { root: '.' }): BuriedItem[] {
     } catch (err) {
       // Do not fail the whole scan on a single parse error
       console.warn(`Warning: failed to parse ${file}: ${(err as Error).message}`);
+    }
+  }
+
+  // Populate author using `git blame` where possible. This is best-effort and
+  // will not throw if git is not available.
+  const getAuthorForLine = (filePath: string, lineNumber: number): string | undefined => {
+    try {
+      const rel = path.relative(root, filePath).replace(/\\/g, '/');
+      // Use porcelain format for predictable parsing
+      const out = execSync(`git -C "${root}" blame --line-porcelain -L ${lineNumber},${lineNumber} -- "${rel}"`, { encoding: 'utf8' });
+      const lines = out.split('\n');
+      const authorLine = lines.find(l => l.startsWith('author '));
+      const authorMailLine = lines.find(l => l.startsWith('author-mail '));
+      if (authorLine) {
+        const name = authorLine.replace(/^author\s+/, '').trim();
+        return name;
+      }
+      if (authorMailLine) {
+        return authorMailLine.replace(/^author-mail\s+/, '').trim();
+      }
+    } catch (err) {
+      // ignore git errors
+    }
+    return undefined;
+  };
+
+  for (const it of results) {
+    try {
+      if (!it.author) {
+        const a = getAuthorForLine((it as any).filePath, (it as any).lineNumber);
+        if (a) it.author = a;
+      }
+    } catch (err) {
+      // ignore per-item failures
     }
   }
 

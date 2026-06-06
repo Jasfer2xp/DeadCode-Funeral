@@ -9,6 +9,10 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import * as scanner from '../scanner/index';
+import { checkUsage } from '../scanner/usageChecker';
+import { createDeletionPR } from '../github/prCreator';
+import { createWarningIssue } from '../github/issueCreator';
+import { appendRecord } from '../graveyard/logger';
 
 const program = new Command();
 
@@ -71,6 +75,62 @@ program
   .action((opts) => {
     const items = scanner.scan({ root: opts.path });
     console.log(JSON.stringify(items, null, 2));
+  });
+
+program
+  .command('open-pr')
+  .description('Open deletion PRs for all expired items')
+  .option('--path <path>', 'Path to scan', '.')
+  .option('--token <token>', 'GitHub token')
+  .option('--owner <owner>', 'GitHub owner/org')
+  .option('--repo <repo>', 'GitHub repository name')
+  .option('--dry-run', 'Preview without action', false)
+  .action(async (opts) => {
+    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun });
+    const now = new Date();
+    const expired = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() < now.getTime());
+    if (!expired.length) {
+      console.log('No expired buried items found.');
+      return;
+    }
+
+    for (const it of expired) {
+      try {
+        const usage = checkUsage(opts.path, it.filePath, it.functionName);
+        if (usage.isUsed) {
+          console.log(`Skipping deletion for ${it.functionName} — usage found.`);
+          // create warning issue instead
+          await createWarningIssue(it, { githubToken: opts.token || process.env.GITHUB_TOKEN, owner: opts.owner, repo: opts.repo, dryRun: opts.dryRun });
+        } else {
+          const pr = await createDeletionPR(it, { githubToken: opts.token || process.env.GITHUB_TOKEN, owner: opts.owner, repo: opts.repo, root: opts.path, dryRun: opts.dryRun });
+          if (pr && pr.prNumber) {
+            appendRecord(it, pr.prNumber, opts.path);
+          }
+        }
+      } catch (err) {
+        console.warn('Error processing item', it.functionName, (err as Error).message);
+      }
+    }
+  });
+
+program
+  .command('warn')
+  .description('Create warning issues for items expiring in N days')
+  .option('--path <path>', 'Path to scan', '.')
+  .option('--days <n>', 'Days before expiry to warn', '7')
+  .option('--token <token>', 'GitHub token')
+  .option('--owner <owner>', 'GitHub owner/org')
+  .option('--repo <repo>', 'GitHub repository')
+  .option('--dry-run', 'Preview without action', false)
+  .action(async (opts) => {
+    const items = scanner.scan({ root: opts.path });
+    const now = new Date();
+    const days = parseInt(opts.days || '7', 10);
+    const ms = days * 24 * 60 * 60 * 1000;
+    const toWarn = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() - now.getTime() <= ms && i.expiry.getTime() > now.getTime());
+    for (const it of toWarn) {
+      await createWarningIssue(it, { githubToken: opts.token || process.env.GITHUB_TOKEN, owner: opts.owner, repo: opts.repo, dryRun: opts.dryRun });
+    }
   });
 
 program.parse(process.argv);

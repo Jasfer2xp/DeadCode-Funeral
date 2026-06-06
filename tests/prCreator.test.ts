@@ -1,0 +1,54 @@
+import { createDeletionPR } from '../src/github/prCreator';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Mock simple-git and @octokit/rest
+jest.mock('simple-git', () => {
+  return jest.fn(() => ({
+    status: jest.fn().mockResolvedValue({ files: [] }),
+    checkoutLocalBranch: jest.fn().mockResolvedValue(undefined),
+    add: jest.fn().mockResolvedValue(undefined),
+    commit: jest.fn().mockResolvedValue(undefined),
+    push: jest.fn().mockResolvedValue(undefined),
+    getRemotes: jest.fn().mockResolvedValue([{ name: 'origin', refs: { fetch: 'https://github.com/testowner/testrepo.git' } }]),
+    fetch: jest.fn().mockResolvedValue(undefined),
+    checkout: jest.fn().mockResolvedValue(undefined),
+    pull: jest.fn().mockResolvedValue(undefined),
+  }));
+});
+
+const mockPullCreate = jest.fn().mockResolvedValue({ data: { html_url: 'http://pr', number: 123 } });
+const mockAddLabels = jest.fn().mockResolvedValue({});
+const mockAddAssignees = jest.fn().mockResolvedValue({});
+const mockReposGet = jest.fn().mockResolvedValue({ data: { default_branch: 'main' } });
+
+jest.mock('@octokit/rest', () => {
+  return {
+    Octokit: jest.fn(() => ({
+      pulls: { create: mockPullCreate },
+      issues: { addLabels: mockAddLabels, addAssignees: mockAddAssignees },
+      repos: { get: mockReposGet },
+    }))
+  };
+});
+
+test('createDeletionPR creates PR and returns info (mocked)', async () => {
+  const tmp = path.resolve('tmp_pr_creator_file.js');
+  fs.writeFileSync(tmp, '/** @funeral { expiry: "2020-01-01", reason: "x" } */\nfunction toRemove() {}');
+
+  const item: any = {
+    filePath: tmp,
+    lineNumber: 1,
+    functionName: 'toRemove',
+    language: 'javascript',
+    expiry: new Date('2020-01-01'),
+    reason: 'x',
+  };
+
+  const res = await createDeletionPR(item, { githubToken: 'token', owner: 'testowner', repo: 'testrepo', root: '.' });
+  fs.unlinkSync(tmp);
+
+  expect(res).not.toBeNull();
+  expect(res?.prUrl).toBe('http://pr');
+  expect(res?.prNumber).toBe(123);
+});

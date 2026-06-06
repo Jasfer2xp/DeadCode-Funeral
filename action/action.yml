@@ -1,0 +1,17 @@
+name: DeadCode Funeral
+description: Automatically delete scheduled dead code
+inputs:
+  github-token:
+    description: GitHub token for PR and issue creation
+    required: true
+  warn-days-before:
+    description: How many days before expiry to warn
+    required: false
+    default: '7'
+  path:
+    description: Path to scan
+    required: false
+    default: '.'
+runs:
+  using: 'node12'
+  main: 'action/index.js'
