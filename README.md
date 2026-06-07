@@ -63,3 +63,23 @@ Contributing
 ------------
 Contributions welcome. Start by running tests, then open a PR with changes. See `CHANGELOG.md` for release notes.
 
+Releasing
+---------
+This project includes convenience scripts to prepare releases. The `prepublishOnly` script runs the build before publish. To create a new patch release locally run:
+
+```bash
+npm run build
+npm version patch -m "chore(release): %s"
+# then push tags and publish when ready
+git push --follow-tags
+npm publish
+```
+
+Alternatively use the included `release` script which runs the build and bumps the patch version:
+
+```bash
+npm run release
+```
+
+Publishing requires that you have an npm account and the repository git history available locally. Releases are manual by default to avoid accidental publishing from CI.
+
