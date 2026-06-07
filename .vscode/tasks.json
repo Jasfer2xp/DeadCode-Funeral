@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "DeadCode: scan (dry)",
+      "type": "shell",
+      "command": "npm run scan:dry",
+      "problemMatcher": []
+    },
+    {
+      "label": "DeadCode: open-pr (dry)",
+      "type": "shell",
+      "command": "npm run open-pr:dry",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build",
+      "type": "shell",
+      "command": "npm run build",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -40,7 +40,8 @@ function fallback(filePath: string): BuriedItem[] {
   const src = fs.readFileSync(abs, 'utf8');
   const results: BuriedItem[] = [];
   // Heuristic: find occurrences like [DeadCode(...)] using regex
-  const re = /\[DeadCode\s*\(([^\)]*)\)\s*\]/g;
+  // Accept DeadCode and DeadCodeAttribute, case-insensitive
+  const re = /\[(?:DeadCode|DeadCodeAttribute)\s*\(([^\)]*)\)\s*\]/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(src))) {
     const argsText = m[1] || '';

@@ -42,14 +42,16 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage('Open a workspace to run DeadCode Funeral.');
         return;
       }
-      const token = vscode.workspace.getConfiguration().get('deadcodeFuneral.githubToken') as string;
+      // Prefer SecretStorage for token
+      let token = await context.secrets.get('deadcodeFuneral.githubToken');
+      if (!token) token = vscode.workspace.getConfiguration().get('deadcodeFuneral.githubToken') as string;
       if (!token) {
-        const pick = await vscode.window.showInformationMessage('No GitHub token configured. Open settings to set it?', 'Open Settings');
-        if (pick === 'Open Settings') vscode.commands.executeCommand('workbench.action.openSettings', 'deadcodeFuneral.githubToken');
+        const pick = await vscode.window.showInformationMessage('No GitHub token configured. Set it now?', 'Set Token');
+        if (pick === 'Set Token') vscode.commands.executeCommand('deadcode-funeral.setToken');
         return;
       }
       const exec = require('child_process').exec;
-      const cmd = `npx deadcode-funeral open-pr --path "${workspace.uri.fsPath}" --token "${token}"`;
+      const cmd = `npx deadcode-funeral open-pr --path "${workspace.uri.fsPath}" --token "${token.replace(/\"/g,'\\\"')}"`;
       const out = vscode.window.createOutputChannel('DeadCode Funeral');
       out.show();
       out.appendLine(`Running: ${cmd}`);
@@ -61,13 +63,29 @@ export function activate(context: vscode.ExtensionContext) {
         }
         out.appendLine(stdout);
         if (stderr) out.appendLine(stderr);
-        vscode.window.showInformationMessage('DeadCode Funeral: open-pr completed (see output).');
+        // Parse PR URL if printed by CLI
+        const m = stdout && stdout.match(/Created PR:\s*(https?:\/\/[^\s]+)/);
+        if (m) {
+          const url = m[1];
+          vscode.window.showInformationMessage('PR created: ' + url, 'Open PR').then(sel => { if (sel === 'Open PR') vscode.env.openExternal(vscode.Uri.parse(url)); });
+        } else {
+          vscode.window.showInformationMessage('DeadCode Funeral: open-pr completed (see output).');
+        }
       });
     } catch (err: any) {
       vscode.window.showErrorMessage('Error running open-pr: ' + err.message);
     }
   });
   context.subscriptions.push(openPrCmd);
+
+  const setTokenCmd = vscode.commands.registerCommand('deadcode-funeral.setToken', async () => {
+    const value = await vscode.window.showInputBox({ prompt: 'Enter GitHub token (will be stored securely)', ignoreFocusOut: true, password: true });
+    if (value) {
+      await context.secrets.store('deadcodeFuneral.githubToken', value);
+      vscode.window.showInformationMessage('GitHub token stored securely.');
+    }
+  });
+  context.subscriptions.push(setTokenCmd);
 
   // Provide hover for @funeral comments (very small heuristic)
   const hoverProvider = vscode.languages.registerHoverProvider(['typescript', 'javascript', 'csharp', 'python'], {
@@ -81,6 +99,47 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(hoverProvider);
+
+  // Diagnostics: flag buried annotations with a warning diagnostic
+  const diag = vscode.languages.createDiagnosticCollection('deadcode-funeral');
+  context.subscriptions.push(diag);
+
+  function refreshDiagnosticsForDocument(document: vscode.TextDocument) {
+    const diagnostics: vscode.Diagnostic[] = [];
+    for (let i = 0; i < document.lineCount; i++) {
+      const line = document.lineAt(i);
+      if (line.text.includes('@funeral') || line.text.includes('@bury') || line.text.includes('DeadCode')) {
+        const range = new vscode.Range(i, 0, i, line.text.length);
+        const d = new vscode.Diagnostic(range, 'Marked as scheduled dead code — consider opening a PR to remove or migrate.', vscode.DiagnosticSeverity.Warning);
+        d.source = 'DeadCode Funeral';
+        diagnostics.push(d);
+      }
+    }
+    diag.set(document.uri, diagnostics);
+  }
+
+  if (vscode.window.activeTextEditor) refreshDiagnosticsForDocument(vscode.window.activeTextEditor.document);
+  context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(e => refreshDiagnosticsForDocument(e.document)));
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => { if (editor) refreshDiagnosticsForDocument(editor.document); }));
+
+  // Code Action Provider: offer quick action to run scan/open-pr
+  class FuneralCodeActionProvider implements vscode.CodeActionProvider {
+    public provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection): vscode.CodeAction[] {
+      const actions: vscode.CodeAction[] = [];
+      const text = document.getText(range);
+      if (/@funeral|@bury|DeadCode/.test(text)) {
+        const act = new vscode.CodeAction('⚰️ Run DeadCode Funeral: Scan (dry-run)', vscode.CodeActionKind.QuickFix);
+        act.command = { command: 'deadcode-funeral.scanWorkspace', title: 'Scan (dry-run)' };
+        actions.push(act);
+        const act2 = new vscode.CodeAction('⚰️ Run DeadCode Funeral: Open PR (dry-run)', vscode.CodeActionKind.QuickFix);
+        act2.command = { command: 'deadcode-funeral.openPr', title: 'Open PR (dry-run)' };
+        actions.push(act2);
+      }
+      return actions;
+    }
+  }
+
+  context.subscriptions.push(vscode.languages.registerCodeActionsProvider(['typescript','javascript','csharp','python'], new FuneralCodeActionProvider()));
 
   // CodeLens provider: show CodeLens above lines containing '@funeral' or '[DeadCode'
   class FuneralCodeLensProvider implements vscode.CodeLensProvider {

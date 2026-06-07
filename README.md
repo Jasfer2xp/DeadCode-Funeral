@@ -59,6 +59,21 @@ Notes & Safety
 - The PR creator checks the working tree is clean before making commits and aborts if a change would remove a large portion of a file (>50%).
 - Tree-sitter is used where available for AST-accurate parsing; robust textual fallbacks are provided so the scanner works even without native parsers installed.
 
+Optional: enabling AST-accurate removals (recommended)
+----------------------------------------------------
+For the safest automated removals, install optional tree-sitter native grammars on your machine or CI. The tool will fall back to heuristics if these are not present, but AST edits are more precise.
+
+Examples:
+
+```bash
+# install optional native parsers (may require build tools)
+npm install --no-save --no-audit tree-sitter tree-sitter-typescript tree-sitter-javascript tree-sitter-php tree-sitter-python
+```
+
+On Windows you may need the Visual Studio Build Tools installed. On Linux/macOS ensure you have a C++ toolchain available.
+
+If you prefer not to install native parsers, the default heuristic removal remains safe due to dry-run and review via PRs.
+
 Contributing
 ------------
 Contributions welcome. Start by running tests, then open a PR with changes. See `CHANGELOG.md` for release notes.

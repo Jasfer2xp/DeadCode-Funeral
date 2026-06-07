@@ -97,7 +97,142 @@ function removeBuriedCode(source: string, item: BuriedItem) {
     }
   }
 
+  // Try PHP AST removal using tree-sitter-php when available
+  if ((item as any).language === 'php') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Parser = require('tree-sitter');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Php = require('tree-sitter-php');
+
+      const parser = new Parser();
+      parser.setLanguage(Php);
+      const tree = parser.parse(source);
+
+      // Find nodes that reference DeadCode attribute or @funeral comment near the given line
+      const lineIndex = (item as any).lineNumber - 1;
+      let targetNode: any = null;
+
+      const getText = (node: any) => source.slice(node.startIndex, node.endIndex);
+
+      const visit = (node: any) => {
+        if (!node || targetNode) return;
+        try {
+          const t = getText(node);
+          if (t && (t.indexOf('DeadCode') !== -1 || t.indexOf('@funeral') !== -1)) {
+            // pick it if it's near the target line
+            const r = node.startPosition && node.startPosition.row;
+            if (typeof r === 'number' && Math.abs(r - lineIndex) <= 6) {
+              targetNode = node;
+              return;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+        for (const c of node.namedChildren || []) {
+          if (targetNode) return;
+          visit(c);
+        }
+      };
+
+      visit(tree.rootNode);
+
+      // If we found a target node, find its containing declaration
+      let decl: any = null;
+      if (targetNode) {
+        let p = targetNode.parent;
+        while (p) {
+          if (/function_definition|method_declaration|class_declaration|property_element|interface_declaration/.test(p.type)) {
+            decl = p;
+            break;
+          }
+          p = p.parent;
+        }
+      }
+
+      if (decl) {
+        const before = source.slice(0, decl.startIndex);
+        const after = source.slice(decl.endIndex);
+        return before + after;
+      } else if (targetNode) {
+        const before = source.slice(0, targetNode.startIndex);
+        const after = source.slice(targetNode.endIndex);
+        return before + after;
+      }
+    } catch (err) {
+      console.warn('PHP AST removal failed, falling back to heuristic remover:', (err as Error).message);
+      // fall through to heuristic
+    }
+  }
+
   // Fallback heuristic remover (for JS/TS and if C# AST removal failed)
+  // Try TypeScript/JavaScript AST removal using tree-sitter when available
+  if ((item as any).language === 'typescript' || (item as any).language === 'javascript') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Parser = require('tree-sitter');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx || require('tree-sitter-javascript');
+
+      const parser = new Parser();
+      parser.setLanguage(TsGrammar);
+      const tree = parser.parse(source);
+
+      // Find comment node containing @funeral near the reported line and remove the following declaration
+      const lineIndex = (item as any).lineNumber - 1;
+      let targetNode: any = null;
+
+      const visit = (node: any) => {
+        if (!node || targetNode) return;
+        try {
+          if (node.type === 'comment') {
+            const text = source.slice(node.startIndex, node.endIndex);
+            if (/@funeral\b/i.test(text)) {
+              const r = node.startPosition && node.startPosition.row;
+              if (typeof r === 'number' && Math.abs(r - lineIndex) <= 6) {
+                // find following sibling or next node that is a declaration
+                let follow = node.nextSibling;
+                let parent = node.parent;
+                while (!follow && parent) {
+                  follow = parent.nextSibling;
+                  parent = parent.parent;
+                }
+                if (follow) targetNode = follow;
+                else targetNode = node;
+              }
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+        for (const c of node.namedChildren || []) {
+          if (targetNode) return;
+          visit(c);
+        }
+      };
+
+      visit(tree.rootNode);
+
+      if (targetNode) {
+        // If the target is a declaration (function/class/variable), remove its full range
+        const t = targetNode.type;
+        if (/function_declaration|method_definition|class_declaration|lexical_declaration|variable_declaration|export_statement/.test(t)) {
+          const before = source.slice(0, targetNode.startIndex);
+          const after = source.slice(targetNode.endIndex);
+          return before + after;
+        }
+        // otherwise remove the comment node only
+        const before = source.slice(0, targetNode.startIndex);
+        const after = source.slice(targetNode.endIndex);
+        return before + after;
+      }
+    } catch (err) {
+      console.warn('TS/JS AST removal failed, falling back to heuristic remover:', (err as Error).message);
+      // fall through to heuristic
+    }
+  }
+
   const startLineIdx = item.lineNumber - 1;
   const lines = source.split('\n');
   // find start index of JSDoc before startLineIdx

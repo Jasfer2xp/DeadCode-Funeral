@@ -7,6 +7,8 @@
   },
   "activationEvents": [
     "onCommand:deadcode-funeral.scanWorkspace",
+    "onCommand:deadcode-funeral.openPr",
+    "onCommand:deadcode-funeral.setToken",
     "onLanguage:typescript",
     "onLanguage:javascript",
     "onLanguage:csharp",
@@ -17,6 +19,14 @@
       {
         "command": "deadcode-funeral.scanWorkspace",
         "title": "DeadCode Funeral: Scan Workspace"
+      },
+      {
+        "command": "deadcode-funeral.openPr",
+        "title": "DeadCode Funeral: Open PRs"
+      },
+      {
+        "command": "deadcode-funeral.setToken",
+        "title": "DeadCode Funeral: Set GitHub Token"
       }
     ]
     ,

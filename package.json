@@ -23,14 +23,22 @@
     "jest": "^29.0.0",
     "@types/node": "^20.0.0",
     "ts-jest": "^29.0.0",
-    "@types/jest": "^29.0.0"
+    "@types/jest": "^29.0.0",
+    "vsce": "^2.0.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "jest --config jest.config.cjs",
+    "scan": "npx deadcode-funeral scan --path .",
+    "scan:dry": "npx deadcode-funeral scan --path . --dry-run",
+    "open-pr": "npx deadcode-funeral open-pr --path .",
+    "open-pr:dry": "npx deadcode-funeral open-pr --path . --dry-run",
     "build:action": "echo 'action entry is JS; no build required'",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build",
-    "release": "npm run build && npm version patch -m \"chore(release): %s\""
+    "release": "npm run build && npm version patch -m \"chore(release): %s\"",
+    "package:vsix": "vsce package --out deadcode-funeral.vsix",
+    "publish:vsce": "vsce publish",
+    "publish:npm": "npm publish --access public || true"
   }
 }
