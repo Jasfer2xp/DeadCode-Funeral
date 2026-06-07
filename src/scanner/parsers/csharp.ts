@@ -39,26 +39,19 @@ function fallback(filePath: string): BuriedItem[] {
   const abs = path.resolve(filePath);
   const src = fs.readFileSync(abs, 'utf8');
   const results: BuriedItem[] = [];
-  // Heuristic: iterate occurrences of [DeadCode(...)], then look forward for next identifier followed by '('
-  let idx = 0;
-  while ((idx = src.indexOf('[DeadCode', idx)) !== -1) {
-    const startIdx = idx;
-    const openParen = src.indexOf('(', startIdx);
-    const closeBracket = src.indexOf(']', startIdx);
-    const argsText = (openParen !== -1 && closeBracket !== -1 && closeBracket > openParen) ? src.slice(openParen + 1, closeBracket) : '';
-    const after = closeBracket !== -1 ? src.slice(closeBracket + 1, closeBracket + 400) : src.slice(startIdx, startIdx + 400);
+  // Heuristic: find occurrences like [DeadCode(...)] using regex
+  const re = /\[DeadCode\s*\(([^\)]*)\)\s*\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src))) {
+    const argsText = m[1] || '';
+    const startIdx = m.index;
+    const after = src.slice(m.index + m[0].length, m.index + m[0].length + 400);
     const nameMatch = after.match(/([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
     const lineNumber = src.slice(0, startIdx).split('\n').length;
     const { expiry, reason, migration, ticket } = extractArgs(argsText || '');
     const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
     const name = nameMatch ? nameMatch[1] : 'unknown';
-    if (name === 'unknown') {
-      // debug assistance when tests fail — harmless in production
-      // eslint-disable-next-line no-console
-      console.log('csharp fallback: argsText=', argsText, 'after=', after.slice(0,200));
-    }
     results.push({ filePath: abs, lineNumber, functionName: name, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
-    idx = startIdx + 1;
   }
   return results;
 }

@@ -14,8 +14,9 @@ import * as tsParser from './parsers/typescript';
 import * as jsParser from './parsers/javascript';
 import * as pyParser from './parsers/python';
 import * as csParser from './parsers/csharp';
+import * as phpParser from './parsers/php';
 
-export type BuriedItem = tsParser.BuriedItem | pyParser.BuriedItem | csParser.BuriedItem;
+export type BuriedItem = tsParser.BuriedItem | pyParser.BuriedItem | csParser.BuriedItem | phpParser.BuriedItem;
 
 export interface ScanOptions {
   root?: string;
@@ -31,7 +32,7 @@ export function scan(options: ScanOptions = { root: '.' }): BuriedItem[] {
   const root = path.resolve(options.root || '.');
 
   // Find candidate files
-  const patterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.cs'];
+  const patterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.cs', '**/*.php'];
   const files = patterns
     .map((p) => glob.sync(p, { cwd: root, absolute: true, ignore: IGNORES }))
     .flat();
@@ -45,6 +46,9 @@ export function scan(options: ScanOptions = { root: '.' }): BuriedItem[] {
         results.push(...parsed as any);
       } else if (file.endsWith('.py')) {
         const parsed = pyParser.parseFile(file);
+        results.push(...parsed as any);
+      } else if (file.endsWith('.php')) {
+        const parsed = phpParser.parseFile(file);
         results.push(...parsed as any);
       } else if (file.endsWith('.cs')) {
         const parsed = csParser.parseFile(file);

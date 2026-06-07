@@ -25,25 +25,17 @@ export function parseFile(filePath: string): BuriedItem[] {
   const src = fs.readFileSync(abs, 'utf8');
   const results: BuriedItem[] = [];
 
-  const re = /@bury\s*\(([^\)]*)\)\s*\ndef\s+([A-Za-z0-9_]+)\s*\(/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src))) {
+  // Tight regex: @bury(...) followed by class or def (handles Django class-based views and functions)
+  const tightRe = /@bury\s*\(([^)]*)\)\s*(?:\r?\n|\s)*?(?:class|def)\s+([A-Za-z0-9_]+)/g;
+  for (const m of Array.from(src.matchAll(tightRe))) {
     const args = m[1];
-    const name = m[2];
-    const lineNumber = src.slice(0, m.index).split('\n').length;
+    const name = m[2] || 'unknown';
+    const lineNumber = src.slice(0, (m.index || 0)).split('\n').length;
     const expiryMatch = args.match(/expiry\s*=\s*["']([^"']+)["']/);
     const reasonMatch = args.match(/reason\s*=\s*["']([^"']+)["']/);
     const ticketMatch = args.match(/ticket\s*=\s*["']([^"']+)["']/);
     const expiry = expiryMatch ? new Date(expiryMatch[1]) : new Date(NaN);
-    results.push({
-      filePath: abs,
-      lineNumber,
-      functionName: name,
-      language: 'python',
-      expiry,
-      reason: reasonMatch ? reasonMatch[1] : '',
-      ticket: ticketMatch ? ticketMatch[1] : undefined,
-    });
+    results.push({ filePath: abs, lineNumber, functionName: name, language: 'python', expiry, reason: reasonMatch ? reasonMatch[1] : '', ticket: ticketMatch ? ticketMatch[1] : undefined });
   }
 
   return results;

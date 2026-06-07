@@ -1,0 +1,13 @@
+import { parseFile } from '../src/scanner/parsers/php';
+import * as fs from 'fs';
+
+test('php (Laravel) parser finds @funeral DocBlock and attribute', () => {
+  const tmp = 'tmp_test_laravel.php';
+  const content = `<?php\n/**\n * @funeral {\n *  expiry: "2025-06-01",\n *  reason: "migrate to new job"\n * }\n */\nfunction oldJob() { }\n\n#\[DeadCode(expiry: "2024-01-01", reason: "old controller")\]\nclass OldController { }\n`;
+  fs.writeFileSync(tmp, content);
+  const items = parseFile(tmp as any);
+  fs.unlinkSync(tmp);
+  expect(items.length).toBe(2);
+  const names = items.map(i => i.functionName).sort();
+  expect(names).toEqual(['OldController', 'oldJob']);
+});
