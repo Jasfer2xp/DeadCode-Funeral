@@ -130,27 +130,64 @@ function removeBuriedCode(source, item) {
     }
     if (start < 0)
         start = item.lineNumber - 1;
-    // find end: naive search for next closing brace '}' after start
-    let end = start;
-    let braceCount = 0;
+
+    // find a declaration following the comment: function, class, export, const/let/var assignment
+    let declStart = -1;
+    let declEnd = -1;
+    const declRegex = /(?:export\s+default\s+function|export\s+function|export\s+default|export\s+const|export\s+class|function\s+|class\s+|(?:const|let|var)\s+[A-Za-z0-9_]+\s*=)/i;
+
     for (let i = start; i < lines.length; i++) {
         const line = lines[i];
-        for (const ch of line) {
-            if (ch === '{')
-                braceCount++;
-            if (ch === '}')
-                braceCount--;
-        }
-        end = i;
-        if (braceCount <= 0 && i > start) {
+        if (declRegex.test(line)) {
+            declStart = i;
+            // compute end by brace matching if block, otherwise end at semicolon or same line
+            let braceCount = 0;
+            let foundBlock = /\{/.test(line);
+            if (foundBlock) {
+                for (let j = i; j < lines.length; j++) {
+                    const l = lines[j];
+                    for (const ch of l) {
+                        if (ch === '{')
+                            braceCount++;
+                        if (ch === '}')
+                            braceCount--;
+                    }
+                    if (braceCount <= 0) {
+                        declEnd = j;
+                        break;
+                    }
+                }
+                // If the block opened and closed on the same line, capture that line
+                if (declEnd === -1 && braceCount === 0)
+                    declEnd = i;
+            }
+            else {
+                // not a block — find semicolon line
+                for (let j = i; j < Math.min(i + 6, lines.length); j++) {
+                    if (/;\s*$/.test(lines[j]) || lines[j].trim() === '') {
+                        declEnd = j;
+                        break;
+                    }
+                }
+                if (declEnd === -1)
+                    declEnd = i;
+            }
             break;
         }
     }
-    // If braces not found (e.g., single-line), remove a small range
-    if (end <= start)
-        end = Math.min(start + 6, lines.length - 1);
-    const before = lines.slice(0, start).join('\n');
-    const after = lines.slice(end + 1).join('\n');
+
+    // If we didn't find a declaration, fall back to simple small range
+    let startRemove = start;
+    let endRemove = declEnd !== -1 ? declEnd : Math.min(start + 6, lines.length - 1);
+
+    if (declStart !== -1 && declStart < start)
+        startRemove = declStart;
+
+    if (declStart !== -1)
+        startRemove = Math.min(start, declStart);
+
+    const before = lines.slice(0, startRemove).join('\n');
+    const after = lines.slice(endRemove + 1).join('\n');
     return before + '\n' + after;
 }
 async function createDeletionPR(item, options = {}) {
@@ -268,4 +305,5 @@ async function createDeletionPR(item, options = {}) {
         return null;
     }
 }
+exports.removeBuriedCode = removeBuriedCode;
 exports.default = { createDeletionPR };

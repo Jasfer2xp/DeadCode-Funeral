@@ -1,0 +1,25 @@
+import { removeBuriedCode } from '../src/github/prCreator';
+
+test('removes export default function', () => {
+  const src = `/** @funeral { expiry: "2020-01-01" } */\nexport default function old() { return 1; }\nexport function keep() { return 2; }`;
+  const item: any = { filePath: 'tmp.js', lineNumber: 1, functionName: 'old', language: 'javascript', expiry: new Date('2020-01-01'), reason: '' };
+  const out = removeBuriedCode(src, item);
+  expect(out).not.toContain('old()');
+  expect(out).toContain('keep()');
+});
+
+test('removes const arrow function and exported const', () => {
+  const src = `/** @funeral { expiry: "2020-01-01" } */\nconst old = () => { return 1; };\nexport const keep = () => { return 2; };`;
+  const item: any = { filePath: 'tmp.js', lineNumber: 1, functionName: 'old', language: 'javascript', expiry: new Date('2020-01-01'), reason: '' };
+  const out = removeBuriedCode(src, item);
+  expect(out).not.toContain('old =');
+  expect(out).toContain('keep =');
+});
+
+test('removes class declaration following JSDoc', () => {
+  const src = `/** @funeral { expiry: "2020-01-01" } */\nclass OldClass { method() { } }\nclass Keep { }`;
+  const item: any = { filePath: 'tmp.js', lineNumber: 1, functionName: 'OldClass', language: 'javascript', expiry: new Date('2020-01-01'), reason: '' };
+  const out = removeBuriedCode(src, item);
+  expect(out).not.toContain('OldClass');
+  expect(out).toContain('Keep');
+});

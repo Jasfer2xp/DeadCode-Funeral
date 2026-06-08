@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 // Minimal VS Code extension that registers a scan command and status bar item.
 export function activate(context: vscode.ExtensionContext) {
@@ -50,28 +51,71 @@ export function activate(context: vscode.ExtensionContext) {
         if (pick === 'Set Token') vscode.commands.executeCommand('deadcode-funeral.setToken');
         return;
       }
-      const exec = require('child_process').exec;
-      const cmd = `npx deadcode-funeral open-pr --path "${workspace.uri.fsPath}" --token "${token.replace(/\"/g,'\\\"')}"`;
       const out = vscode.window.createOutputChannel('DeadCode Funeral');
       out.show();
-      out.appendLine(`Running: ${cmd}`);
-      exec(cmd, (err: any, stdout: string, stderr: string) => {
-        if (err) {
-          out.appendLine('Error: ' + err.message);
-          vscode.window.showErrorMessage('Failed to open PRs. See DeadCode Funeral output.');
+
+      // Try to require the workspace scanner and prCreator modules to run in-process and use Octokit
+      try {
+        const scannerPath = path.join(workspace.uri.fsPath, 'src', 'scanner', 'index.js');
+        const prCreatorPath = path.join(workspace.uri.fsPath, 'src', 'github', 'prCreator.js');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const scanner = require(scannerPath);
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const prCreator = require(prCreatorPath);
+
+        out.appendLine('Running in-process scanner...');
+        const items: any[] = scanner.scan({ root: workspace.uri.fsPath });
+        if (!items || items.length === 0) {
+          vscode.window.showInformationMessage('No buried items found in workspace.');
           return;
         }
-        out.appendLine(stdout);
-        if (stderr) out.appendLine(stderr);
-        // Parse PR URL if printed by CLI
-        const m = stdout && stdout.match(/Created PR:\s*(https?:\/\/[^\s]+)/);
-        if (m) {
-          const url = m[1];
-          vscode.window.showInformationMessage('PR created: ' + url, 'Open PR').then(sel => { if (sel === 'Open PR') vscode.env.openExternal(vscode.Uri.parse(url)); });
-        } else {
-          vscode.window.showInformationMessage('DeadCode Funeral: open-pr completed (see output).');
+
+        const pick = await vscode.window.showQuickPick(['Dry run', 'Create PRs (one-by-one)'], { placeHolder: `Found ${items.length} buried items. How should DeadCode Funeral proceed?` });
+        if (!pick) return;
+
+        for (const it of items) {
+          out.appendLine(`Item: ${JSON.stringify(it)}`);
+          if (pick === 'Dry run') {
+            out.appendLine('[dry-run] would create PR for ' + it.functionName);
+          } else {
+            out.appendLine('Creating PR for ' + it.functionName + '...');
+            try {
+              const res = await prCreator.createDeletionPR(it, { githubToken: token, root: workspace.uri.fsPath, dryRun: false });
+              out.appendLine('PR result: ' + JSON.stringify(res));
+              if (res && res.prUrl) {
+                const open = await vscode.window.showInformationMessage('PR created: ' + res.prUrl, 'Open PR');
+                if (open === 'Open PR') vscode.env.openExternal(vscode.Uri.parse(res.prUrl));
+              }
+            } catch (err: any) {
+              out.appendLine('Failed to create PR: ' + err.message);
+            }
+          }
         }
-      });
+        vscode.window.showInformationMessage('DeadCode Funeral: open-pr completed. See output for details.');
+        return;
+      } catch (err: any) {
+        // Fallback to CLI if in-process modules not available
+        const exec = require('child_process').exec;
+        const cmd = `npx deadcode-funeral open-pr --path "${workspace.uri.fsPath}" --token "${token.replace(/\"/g,'\\"')}"`;
+        out.appendLine(`Falling back to CLI: ${cmd}`);
+        exec(cmd, (err2: any, stdout: string, stderr: string) => {
+          if (err2) {
+            out.appendLine('Error: ' + err2.message);
+            vscode.window.showErrorMessage('Failed to open PRs. See DeadCode Funeral output.');
+            return;
+          }
+          out.appendLine(stdout);
+          if (stderr) out.appendLine(stderr);
+          const m = stdout && stdout.match(/Created PR:\s*(https?:\/\/[^\s]+)/);
+          if (m) {
+            const url = m[1];
+            vscode.window.showInformationMessage('PR created: ' + url, 'Open PR').then(sel => { if (sel === 'Open PR') vscode.env.openExternal(vscode.Uri.parse(url)); });
+          } else {
+            vscode.window.showInformationMessage('DeadCode Funeral: open-pr completed (see output).');
+          }
+        });
+        return;
+      }
     } catch (err: any) {
       vscode.window.showErrorMessage('Error running open-pr: ' + err.message);
     }
