@@ -1,0 +1,345 @@
+--- original
++++ modified
+ "use strict";
+-/**
++    var desc = Object.getOwnPropertyDescriptor(m, k);
+- * TypeScript / JavaScript annotation parser using tree-sitter when available.
++    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+- *
++      desc = { enumerable: true, get: function() { return m[k]; } };
+- * This implementation will try to use tree-sitter and the official
++    }
+- * tree-sitter-typescript grammar to find comment nodes containing
++    Object.defineProperty(o, k2, desc);
+- * `@funeral` and then locate the following function / class node to
++}) : (function(o, m, k, k2) {
+- * extract the identifier and location. If tree-sitter is not available
++    if (k2 === undefined) k2 = k;
+- * it falls back to the original regex-based heuristic.
++    o[k2] = m[k];
+- */
++}));
+-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
++var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+-    if (k2 === undefined) k2 = k;
++    Object.defineProperty(o, "default", { enumerable: true, value: v });
+-    var desc = Object.getOwnPropertyDescriptor(m, k);
++}) : function(o, v) {
+-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
++    o["default"] = v;
+-      desc = { enumerable: true, get: function() { return m[k]; } };
++});
+-    }
++var __importStar = (this && this.__importStar) || (function () {
+-    Object.defineProperty(o, k2, desc);
++    var ownKeys = function(o) {
+-}) : (function(o, m, k, k2) {
++        ownKeys = Object.getOwnPropertyNames || function (o) {
+-    if (k2 === undefined) k2 = k;
++            var ar = [];
+-    o[k2] = m[k];
++            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+-}));
++            return ar;
+-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
++        };
+-    Object.defineProperty(o, "default", { enumerable: true, value: v });
++        return ownKeys(o);
+-}) : function(o, v) {
++    };
+-    o["default"] = v;
++    return function (mod) {
+-});
++        if (mod && mod.__esModule) return mod;
+-var __importStar = (this && this.__importStar) || (function () {
++        var result = {};
+-    var ownKeys = function(o) {
++        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+-        ownKeys = Object.getOwnPropertyNames || function (o) {
++        __setModuleDefault(result, mod);
+-            var ar = [];
++        return result;
+-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
++    };
+-            return ar;
++})();
+-        };
++Object.defineProperty(exports, "__esModule", { value: true });
+-        return ownKeys(o);
++exports.parseFile = parseFile;
+-    };
++const fs = __importStar(require("fs"));
+-    return function (mod) {
++const path = __importStar(require("path"));
+-        if (mod && mod.__esModule) return mod;
++function extractFields(block) {
+-        var result = {};
++    const pick = (key) => {
+-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
++        const pattern = `${key}\\s*[:=]\\s*["']([^"']+)["']`;
+-        __setModuleDefault(result, mod);
++        const re = new RegExp(pattern, 'i');
+-        return result;
++        const m = block.match(re);
+-    };
++        return m ? m[1] : undefined;
+-})();
++    };
+-Object.defineProperty(exports, "__esModule", { value: true });
++    const expiry = pick('expiry');
+-exports.parseFile = parseFile;
++    const reason = pick('reason');
+-const fs = __importStar(require("fs"));
++    const migration = pick('migration');
+-const path = __importStar(require("path"));
++    const ticket = pick('ticket');
+-function extractFields(block) {
++    return { expiry, reason, migration, ticket };
+-    const pick = (key) => {
++}
+-        const pattern = `${key}\\s*[:=]\\s*["']([^"']+)["']`;
++// Fallback simple parser (previous heuristic) kept for environments without tree-sitter
+-        const re = new RegExp(pattern, 'i');
++function fallbackParse(filePath) {
+-        const m = block.match(re);
++    const abs = path.resolve(filePath);
+-        return m ? m[1] : undefined;
++    const src = fs.readFileSync(abs, 'utf8');
+-    };
++    const results = [];
+-    const expiry = pick('expiry');
++    const jsdocRe = /\/\*\*[\s\S]*?\*\//g;
+-    const reason = pick('reason');
++    let m;
+-    const migration = pick('migration');
++    while ((m = jsdocRe.exec(src))) {
+-    const ticket = pick('ticket');
++        const block = m[0];
+-    return { expiry, reason, migration, ticket };
++        if (/\@funeral\b/i.test(block)) {
+-}
++            const { expiry, reason, migration, ticket } = extractFields(block);
+-// Fallback simple parser (previous heuristic) kept for environments without tree-sitter
++            const startIndex = m.index;
+-function fallbackParse(filePath) {
++            const lineNumber = src.slice(0, startIndex).split('\n').length;
+-    const abs = path.resolve(filePath);
++            const after = src.slice(m.index + m[0].length);
+-    const src = fs.readFileSync(abs, 'utf8');
++            const fnDecl = after.match(/function\s+([A-Za-z0-9_\$]+)\s*\(/) || after.match(/class\s+([A-Za-z0-9_\$]+)/) || after.match(/(?:const|let|var)\s+([A-Za-z0-9_\$]+)\s*=/);
+-    const results = [];
++            const functionName = fnDecl ? fnDecl[1] : 'unknown';
+-    const jsdocRe = /\/\*\*[\s\S]*?\*\//g;
++            let expiryDate = new Date(NaN);
+-    let m;
++            if (expiry) {
+-    while ((m = jsdocRe.exec(src))) {
++                const d = new Date(expiry);
+-        const block = m[0];
++                if (!isNaN(d.getTime()))
+-        if (/\@funeral\b/i.test(block)) {
++                    expiryDate = d;
+-            const { expiry, reason, migration, ticket } = extractFields(block);
++            }
+-            const startIndex = m.index;
++            results.push({ filePath: abs, lineNumber, functionName, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
+-            const lineNumber = src.slice(0, startIndex).split('\n').length;
++        }
+-            const after = src.slice(m.index + m[0].length);
++    }
+-            const fnDecl = after.match(/function\s+([A-Za-z0-9_\$]+)\s*\(/) || after.match(/class\s+([A-Za-z0-9_\$]+)/) || after.match(/(?:const|let|var)\s+([A-Za-z0-9_\$]+)\s*=/);
++    return results;
+-            const functionName = fnDecl ? fnDecl[1] : 'unknown';
++}
+-            let expiryDate = new Date(NaN);
++function parseFile(filePath) {
+-            if (expiry) {
++    // Try to require tree-sitter and the typescript grammar
+-                const d = new Date(expiry);
++    try {
+-                if (!isNaN(d.getTime()))
++        // eslint-disable-next-line @typescript-eslint/no-var-requires
+-                    expiryDate = d;
++        const Parser = require('tree-sitter');
+-            }
++        // tree-sitter-typescript exposes two grammars; prefer 'typescript'
+-            results.push({ filePath: abs, lineNumber, functionName, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
++        // eslint-disable-next-line @typescript-eslint/no-var-requires
+-        }
++        const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx;
+-    }
++        const abs = path.resolve(filePath);
+-    return results;
++        const src = fs.readFileSync(abs, 'utf8');
+-}
++        const parser = new Parser();
+-function parseFile(filePath) {
++        parser.setLanguage(TsGrammar);
+-    // Try to require tree-sitter and the typescript grammar
++        const tree = parser.parse(src);
+-    try {
++        const cursor = tree.walk();
+-        // eslint-disable-next-line @typescript-eslint/no-var-requires
++        const results = [];
+-        const Parser = require('tree-sitter');
++        // Walk all comment nodes and look for @funeral
+-        // tree-sitter-typescript exposes two grammars; prefer 'typescript'
++        const visit = (node) => {
+-        // eslint-disable-next-line @typescript-eslint/no-var-requires
++            if (!node)
+-        const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx;
++                return;
+-        const abs = path.resolve(filePath);
++            if (node.type === 'comment') {
+-        const src = fs.readFileSync(abs, 'utf8');
++                const text = src.slice(node.startIndex, node.endIndex);
+-        const parser = new Parser();
++                if (/\@funeral\b/i.test(text)) {
+-        parser.setLanguage(TsGrammar);
++                    const { expiry, reason, migration, ticket } = extractFields(text);
+-        const tree = parser.parse(src);
++                    // find next sibling or following node to determine the function/class name
+-        const cursor = tree.walk();
++                    let follow = node.nextSibling;
+-        const results = [];
++                    // if not found, walk upward to parent and try nextSibling
+-        // Walk all comment nodes and look for @funeral
++                    let parent = node.parent;
+-        const visit = (node) => {
++                    while (!follow && parent) {
+-            if (!node)
++                        follow = parent.nextSibling;
+-                return;
++                        parent = parent.parent;
+-            if (node.type === 'comment') {
++                    }
+-                const text = src.slice(node.startIndex, node.endIndex);
++                    // If still not found, try to find the next node in tree traversal
+-                if (/\@funeral\b/i.test(text)) {
++                    if (!follow) {
+-                    const { expiry, reason, migration, ticket } = extractFields(text);
++                        const all = tree.rootNode.descendantsOfType ? tree.rootNode.descendantsOfType('*') : null;
+-                    // find next sibling or following node to determine the function/class name
++                    }
+-                    let follow = node.nextSibling;
++                    let name = 'unknown';
+-                    // if not found, walk upward to parent and try nextSibling
++                    let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
+-                    let parent = node.parent;
++                    if (follow) {
+-                    while (!follow && parent) {
++                        // check for function_declaration, method_definition, class_declaration, variable_declaration
+-                        follow = parent.nextSibling;
++                        const t = follow.type;
+-                        parent = parent.parent;
++                        if (t === 'function_declaration' && follow.childForFieldName) {
+-                    }
++                            const id = follow.childForFieldName('name');
+-                    // If still not found, try to find the next node in tree traversal
++                            if (id)
+-                    if (!follow) {
++                                name = src.slice(id.startIndex, id.endIndex);
+-                        const all = tree.rootNode.descendantsOfType ? tree.rootNode.descendantsOfType('*') : null;
++                        }
+-                    }
++                        else if (t === 'class_declaration') {
+-                    let name = 'unknown';
++                            const id = follow.childForFieldName('name');
+-                    let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
++                            if (id)
+-                    if (follow) {
++                                name = src.slice(id.startIndex, id.endIndex);
+-                        // check for function_declaration, method_definition, class_declaration, variable_declaration
++                        }
+-                        const t = follow.type;
++                        else if (t === 'lexical_declaration' || t === 'variable_declaration') {
+-                        if (t === 'function_declaration' && follow.childForFieldName) {
++                            // find identifier child
+-                            const id = follow.childForFieldName('name');
++                            const id = follow.namedChildren && follow.namedChildren.find((c) => c.type === 'identifier');
+                             if (id)
+                                 name = src.slice(id.startIndex, id.endIndex);
+                         }
+-                        else if (t === 'class_declaration') {
++                        else if (t === 'export_statement') {
+-                            const id = follow.childForFieldName('name');
++                            // try to look into export next
+-                            if (id)
++                            const child = follow.namedChildren && follow.namedChildren[0];
+-                                name = src.slice(id.startIndex, id.endIndex);
++                            if (child && child.type === 'function_declaration') {
+-                        }
++                                const id = child.childForFieldName && child.childForFieldName('name');
+-                        else if (t === 'lexical_declaration' || t === 'variable_declaration') {
++                                if (id)
+-                            // find identifier child
++                                    name = src.slice(id.startIndex, id.endIndex);
+-                            const id = follow.namedChildren && follow.namedChildren.find((c) => c.type === 'identifier');
++                            }
+-                            if (id)
++                        }
+-                                name = src.slice(id.startIndex, id.endIndex);
++                    }
+-                        }
++                    let expiryDate = new Date(NaN);
+-                        else if (t === 'export_statement') {
++                    if (expiry) {
+-                            // try to look into export next
++                        const d = new Date(expiry);
+-                            const child = follow.namedChildren && follow.namedChildren[0];
++                        if (!isNaN(d.getTime()))
+-                            if (child && child.type === 'function_declaration') {
++                            expiryDate = d;
+-                                const id = child.childForFieldName && child.childForFieldName('name');
++                    }
+-                                if (id)
++                    results.push({ filePath: abs, lineNumber, functionName: name, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
+-                                    name = src.slice(id.startIndex, id.endIndex);
++                }
+-                            }
++            }
+-                        }
++            // visit children
+-                    }
++            if (node.namedChildren && node.namedChildren.length) {
+-                    let expiryDate = new Date(NaN);
++                for (const c of node.namedChildren)
+-                    if (expiry) {
++                    visit(c);
+-                        const d = new Date(expiry);
++            }
+-                        if (!isNaN(d.getTime()))
++        };
+-                            expiryDate = d;
++        visit(tree.rootNode);
+-                    }
++        return results;
+-                    results.push({ filePath: abs, lineNumber, functionName: name, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
++    }
+-                }
++    catch (err) {
+-            }
++        // If tree-sitter not available or parsing fails, fall back
+-            // visit children
++        console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
+-            if (node.namedChildren && node.namedChildren.length) {
++        return fallbackParse(filePath);
+-                for (const c of node.namedChildren)
++    }
+-                    visit(c);
++}
+-            }
++exports.default = { parseFile };
+-        };
++
+-        visit(tree.rootNode);
+-        return results;
+-    }
+-    catch (err) {
+-        // If tree-sitter not available or parsing fails, fall back
+-        console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
+-        return fallbackParse(filePath);
+-    }
+-}
+-exports.default = { parseFile };
+-

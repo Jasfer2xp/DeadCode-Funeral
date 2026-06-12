@@ -193,3 +193,147 @@ This file is append-only and records every automatic deletion performed by DeadC
 - **Migration:** n/a
 - **Author:** unknown
 - **PR:** #5
+
+## 2026-06-08 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-08 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-08 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-08 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-08 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5
+
+## 2026-06-12 — old
+- **File:** a.js (line 2)
+- **Language:** javascript
+- **Reason:** r
+- **Migration:** n/a
+- **Author:** unknown
+- **PR:** #5

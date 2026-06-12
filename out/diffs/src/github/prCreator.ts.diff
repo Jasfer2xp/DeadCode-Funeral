@@ -1,0 +1,834 @@
+--- original
++++ modified
+-/**
++
+- * GitHub PR creator
++
+- * - Creates a git branch, removes the buried item from the file, commits and pushes
++// Very small heuristic remover for JS/TS: remove the comment block and the
+- * - Opens a Pull Request via the GitHub API
++// following function/class block. This is NOT perfect but sufficient for
+- *
++// scaffolding; a tree-sitter edit would be preferred in production.
+- * This implementation is intentionally defensive: it supports a --dry-run
++// Remove the buried code from source using heuristics for JS/TS and
+- * mode and will not crash on network/git failures. In CI you'll need to ensure
++// an AST-based approach for C# (tree-sitter) when possible.
+- * `GITHUB_TOKEN` is provided and the runner has permission to push branches.
++export function removeBuriedCode(source: string, item: BuriedItem) {
+- */
++  // If C#, try tree-sitter-c-sharp to remove the node precisely.
+-
++  if ((item as any).language === 'csharp') {
+-import * as fs from 'fs';
++    try {
+-import * as path from 'path';
++      // lazy require to avoid hard dependency
+-import simpleGit from 'simple-git';
++      // eslint-disable-next-line @typescript-eslint/no-var-requires
+-import { Octokit } from '@octokit/rest';
++      const Parser = require('tree-sitter');
+-
++      // eslint-disable-next-line @typescript-eslint/no-var-requires
+-import type { BuriedItem } from '../scanner/index';
++      const CSharp = require('tree-sitter-c-sharp');
+ 
+-export interface PROptions {
++      const parser = new Parser();
+-  githubToken?: string;
++      parser.setLanguage(CSharp);
+-  owner?: string;
++      const tree = parser.parse(source);
+-  repo?: string;
++
+-  root?: string;
++      // Find attribute node at or near the given line
+-  dryRun?: boolean;
++      const lineIndex = (item as any).lineNumber - 1;
+-}
++      let targetNode: any = null;
+ 
+-function sanitizeBranchName(name: string) {
++      // Walk and find an attribute node whose startPosition.row is close to lineIndex
+-  return name.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
++      const visit = (node: any) => {
+-}
++        if (!node) return;
+-
++        if (node.type === 'attribute') {
+-// Very small heuristic remover for JS/TS: remove the comment block and the
++          const r = node.startPosition && node.startPosition.row;
+-// following function/class block. This is NOT perfect but sufficient for
++          if (typeof r === 'number' && Math.abs(r - lineIndex) <= 3) {
+-// scaffolding; a tree-sitter edit would be preferred in production.
++            targetNode = node;
+-// Remove the buried code from source using heuristics for JS/TS and
++            return;
+-// an AST-based approach for C# (tree-sitter) when possible.
++          }
+-export function removeBuriedCode(source: string, item: BuriedItem) {
++        }
+-  // If C#, try tree-sitter-c-sharp to remove the node precisely.
++        for (const c of node.namedChildren || []) {
+-  if ((item as any).language === 'csharp') {
++          if (targetNode) return;
+-    try {
++          visit(c);
+-      // lazy require to avoid hard dependency
++        }
+-      // eslint-disable-next-line @typescript-eslint/no-var-requires
++      };
+-      const Parser = require('tree-sitter');
++
+-      // eslint-disable-next-line @typescript-eslint/no-var-requires
++      visit(tree.rootNode);
+-      const CSharp = require('tree-sitter-c-sharp');
++
+-
++      // If we found attribute, find its containing declaration (method/class/property)
+-      const parser = new Parser();
++      let decl: any = null;
+-      parser.setLanguage(CSharp);
++      if (targetNode) {
+-      const tree = parser.parse(source);
++        let p = targetNode.parent;
+-
++        while (p) {
+-      // Find attribute node at or near the given line
++          if (/method_declaration|constructor_declaration|class_declaration|property_declaration|field_declaration/.test(p.type)) {
+-      const lineIndex = (item as any).lineNumber - 1;
++            decl = p;
+-      let targetNode: any = null;
++            break;
+-
++          }
+-      // Walk and find an attribute node whose startPosition.row is close to lineIndex
++          p = p.parent;
+-      const visit = (node: any) => {
++        }
+-        if (!node) return;
++      }
+-        if (node.type === 'attribute') {
++
+-          const r = node.startPosition && node.startPosition.row;
++      // If decl found, remove its full range; else if attribute found, remove attribute only
+-          if (typeof r === 'number' && Math.abs(r - lineIndex) <= 3) {
++      if (decl) {
+-            targetNode = node;
++        const before = source.slice(0, decl.startIndex);
+-            return;
++        const after = source.slice(decl.endIndex);
+-          }
++        return before + after;
+-        }
++      } else if (targetNode) {
+-        for (const c of node.namedChildren || []) {
++        const before = source.slice(0, targetNode.startIndex);
+-          if (targetNode) return;
++        const after = source.slice(targetNode.endIndex);
+-          visit(c);
++        return before + after;
+-        }
++      }
+-      };
++    } catch (err) {
+-
++      console.warn('C# AST removal failed, falling back to heuristic remover:', (err as Error).message);
+-      visit(tree.rootNode);
++      // fall through to JS/TS heuristic
+-
++    }
+-      // If we found attribute, find its containing declaration (method/class/property)
++  }
+-      let decl: any = null;
++
+-      if (targetNode) {
++  // Try PHP AST removal using tree-sitter-php when available
+-        let p = targetNode.parent;
++  if ((item as any).language === 'php') {
+-        while (p) {
++    try {
+-          if (/method_declaration|constructor_declaration|class_declaration|property_declaration|field_declaration/.test(p.type)) {
++      // eslint-disable-next-line @typescript-eslint/no-var-requires
+-            decl = p;
++      const Parser = require('tree-sitter');
+-            break;
++      // eslint-disable-next-line @typescript-eslint/no-var-requires
+-          }
++      const Php = require('tree-sitter-php');
+-          p = p.parent;
++
+-        }
++      const parser = new Parser();
+-      }
++      parser.setLanguage(Php);
+-
++      const tree = parser.parse(source);
+-      // If decl found, remove its full range; else if attribute found, remove attribute only
++
+-      if (decl) {
++      // Find nodes that reference DeadCode attribute or @funeral comment near the given line
+-        const before = source.slice(0, decl.startIndex);
++      const lineIndex = (item as any).lineNumber - 1;
+-        const after = source.slice(decl.endIndex);
++      let targetNode: any = null;
+-        return before + after;
++
+-      } else if (targetNode) {
++      const getText = (node: any) => source.slice(node.startIndex, node.endIndex);
+-        const before = source.slice(0, targetNode.startIndex);
++
+-        const after = source.slice(targetNode.endIndex);
++      const visit = (node: any) => {
+-        return before + after;
++        if (!node || targetNode) return;
+-      }
++        try {
+-    } catch (err) {
++          const t = getText(node);
+-      console.warn('C# AST removal failed, falling back to heuristic remover:', (err as Error).message);
++          if (t && (t.indexOf('DeadCode') !== -1 || t.indexOf('@funeral') !== -1)) {
+-      // fall through to JS/TS heuristic
++            // pick it if it's near the target line
+-    }
++            const r = node.startPosition && node.startPosition.row;
+-  }
++            if (typeof r === 'number' && Math.abs(r - lineIndex) <= 6) {
+-
++              targetNode = node;
+-  // Try PHP AST removal using tree-sitter-php when available
++              return;
+-  if ((item as any).language === 'php') {
++            }
+-    try {
++          }
+-      // eslint-disable-next-line @typescript-eslint/no-var-requires
++        } catch (e) {
+-      const Parser = require('tree-sitter');
++          // ignore
+-      // eslint-disable-next-line @typescript-eslint/no-var-requires
++        }
+-      const Php = require('tree-sitter-php');
++        for (const c of node.namedChildren || []) {
+-
++          if (targetNode) return;
+-      const parser = new Parser();
++          visit(c);
+-      parser.setLanguage(Php);
++        }
+-      const tree = parser.parse(source);
++      };
+ 
+-      // Find nodes that reference DeadCode attribute or @funeral comment near the given line
++      visit(tree.rootNode);
+-      const lineIndex = (item as any).lineNumber - 1;
++
+-      let targetNode: any = null;
++      // If we found a target node, find its containing declaration
+-
++      let decl: any = null;
+-      const getText = (node: any) => source.slice(node.startIndex, node.endIndex);
++      if (targetNode) {
+-
++        let p = targetNode.parent;
+-      const visit = (node: any) => {
++        while (p) {
+-        if (!node || targetNode) return;
++          if (/function_definition|method_declaration|class_declaration|property_element|interface_declaration/.test(p.type)) {
+-        try {
++            decl = p;
+-          const t = getText(node);
++            break;
+-          if (t && (t.indexOf('DeadCode') !== -1 || t.indexOf('@funeral') !== -1)) {
++          }
+-            // pick it if it's near the target line
++          p = p.parent;
+-            const r = node.startPosition && node.startPosition.row;
++        }
+-            if (typeof r === 'number' && Math.abs(r - lineIndex) <= 6) {
++      }
+-              targetNode = node;
++
+-              return;
++      if (decl) {
+-            }
++        const before = source.slice(0, decl.startIndex);
+-          }
++        const after = source.slice(decl.endIndex);
+-        } catch (e) {
++        return before + after;
+-          // ignore
++      } else if (targetNode) {
+-        }
++        const before = source.slice(0, targetNode.startIndex);
+-        for (const c of node.namedChildren || []) {
++        const after = source.slice(targetNode.endIndex);
+-          if (targetNode) return;
++        return before + after;
+-          visit(c);
++      }
+-        }
++    } catch (err) {
+-      };
++      console.warn('PHP AST removal failed, falling back to heuristic remover:', (err as Error).message);
+-
++      // fall through to heuristic
+-      visit(tree.rootNode);
++    }
+-
++  }
+-      // If we found a target node, find its containing declaration
++
+-      let decl: any = null;
++  // Fallback heuristic remover (for JS/TS and if C# AST removal failed)
+-      if (targetNode) {
++  // Try TypeScript/JavaScript AST removal using tree-sitter when available
+-        let p = targetNode.parent;
++  if ((item as any).language === 'typescript' || (item as any).language === 'javascript') {
+-        while (p) {
++    try {
+-          if (/function_definition|method_declaration|class_declaration|property_element|interface_declaration/.test(p.type)) {
++      // eslint-disable-next-line @typescript-eslint/no-var-requires
+-            decl = p;
++      const Parser = require('tree-sitter');
+-            break;
++      // eslint-disable-next-line @typescript-eslint/no-var-requires
+-          }
++      const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx || require('tree-sitter-javascript');
+-          p = p.parent;
++
+-        }
++      const parser = new Parser();
+-      }
++      parser.setLanguage(TsGrammar);
+-
++      const tree = parser.parse(source);
+-      if (decl) {
++
+-        const before = source.slice(0, decl.startIndex);
++      // Find comment node containing @funeral near the reported line and remove the following declaration
+-        const after = source.slice(decl.endIndex);
++      const lineIndex = (item as any).lineNumber - 1;
+-        return before + after;
++      let targetNode: any = null;
+-      } else if (targetNode) {
++
+-        const before = source.slice(0, targetNode.startIndex);
++      const visit = (node: any) => {
+-        const after = source.slice(targetNode.endIndex);
++        if (!node || targetNode) return;
+-        return before + after;
++        try {
+-      }
++          if (node.type === 'comment') {
+-    } catch (err) {
++            const text = source.slice(node.startIndex, node.endIndex);
+-      console.warn('PHP AST removal failed, falling back to heuristic remover:', (err as Error).message);
++            if (/@funeral\b/i.test(text)) {
+-      // fall through to heuristic
++              const r = node.startPosition && node.startPosition.row;
+-    }
++              if (typeof r === 'number' && Math.abs(r - lineIndex) <= 6) {
+-  }
++                // find following sibling or next node that is a declaration
+-
++                let follow = node.nextSibling;
+-  // Fallback heuristic remover (for JS/TS and if C# AST removal failed)
++                let parent = node.parent;
+-  // Try TypeScript/JavaScript AST removal using tree-sitter when available
++                while (!follow && parent) {
+-  if ((item as any).language === 'typescript' || (item as any).language === 'javascript') {
++                  follow = parent.nextSibling;
+-    try {
++                  parent = parent.parent;
+-      // eslint-disable-next-line @typescript-eslint/no-var-requires
++                }
+-      const Parser = require('tree-sitter');
++                if (follow) targetNode = follow;
+-      // eslint-disable-next-line @typescript-eslint/no-var-requires
++                else targetNode = node;
+-      const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx || require('tree-sitter-javascript');
++              }
+-
++            }
+-      const parser = new Parser();
++          }
+-      parser.setLanguage(TsGrammar);
++        } catch (e) {
+-      const tree = parser.parse(source);
++          // ignore
+-
++        }
+-      // Find comment node containing @funeral near the reported line and remove the following declaration
++        for (const c of node.namedChildren || []) {
+-      const lineIndex = (item as any).lineNumber - 1;
++          if (targetNode) return;
+-      let targetNode: any = null;
++          visit(c);
+-
++        }
+-      const visit = (node: any) => {
++      };
+-        if (!node || targetNode) return;
++
+-        try {
++      visit(tree.rootNode);
+-          if (node.type === 'comment') {
++
+-            const text = source.slice(node.startIndex, node.endIndex);
++      if (targetNode) {
+-            if (/@funeral\b/i.test(text)) {
++        // If the target is a declaration (function/class/variable), remove its full range
+-              const r = node.startPosition && node.startPosition.row;
++        const t = targetNode.type;
+-              if (typeof r === 'number' && Math.abs(r - lineIndex) <= 6) {
++        if (/function_declaration|method_definition|class_declaration|lexical_declaration|variable_declaration|export_statement/.test(t)) {
+-                // find following sibling or next node that is a declaration
++          const before = source.slice(0, targetNode.startIndex);
+-                let follow = node.nextSibling;
++          const after = source.slice(targetNode.endIndex);
+-                let parent = node.parent;
++          return before + after;
+-                while (!follow && parent) {
++        }
+-                  follow = parent.nextSibling;
++        // otherwise remove the comment node only
+-                  parent = parent.parent;
++        const before = source.slice(0, targetNode.startIndex);
+-                }
++        const after = source.slice(targetNode.endIndex);
+-                if (follow) targetNode = follow;
++        return before + after;
+-                else targetNode = node;
++      }
+-              }
++    } catch (err) {
+-            }
++      console.warn('TS/JS AST removal failed, falling back to heuristic remover:', (err as Error).message);
+-          }
++      // fall through to heuristic
+-        } catch (e) {
++    }
+-          // ignore
++  }
+-        }
++
+-        for (const c of node.namedChildren || []) {
++  const startLineIdx = item.lineNumber - 1;
+-          if (targetNode) return;
++  const lines = source.split('\n');
+-          visit(c);
++  // find start index of JSDoc before startLineIdx
+-        }
++  let start = startLineIdx;
+-      };
++  while (start >= 0 && /\*\*/.test(lines[start]) === false && /\/\*/.test(lines[start]) === false) {
+-
++    start--;
+-      visit(tree.rootNode);
++  }
+-
++  if (start < 0) start = item.lineNumber - 1;
+-      if (targetNode) {
++
+-        // If the target is a declaration (function/class/variable), remove its full range
++  // find a declaration following the comment: function, class, export, const/let/var assignment
+-        const t = targetNode.type;
++  let declStart = -1;
+-        if (/function_declaration|method_definition|class_declaration|lexical_declaration|variable_declaration|export_statement/.test(t)) {
++  let declEnd = -1;
+-          const before = source.slice(0, targetNode.startIndex);
++
+-          const after = source.slice(targetNode.endIndex);
++  const declRegex = /(?:export\s+default\s+function|export\s+function|export\s+default|export\s+const|export\s+class|function\s+|class\s+|(?:const|let|var)\s+[A-Za-z0-9_]+\s*=)/i;
+-          return before + after;
++
+-        }
++  for (let i = start; i < lines.length; i++) {
+-        // otherwise remove the comment node only
++    const line = lines[i];
+-        const before = source.slice(0, targetNode.startIndex);
++    if (declRegex.test(line)) {
+-        const after = source.slice(targetNode.endIndex);
++      declStart = i;
+-        return before + after;
++      // compute end by brace matching if block, otherwise end at semicolon or same line
+-      }
++      let braceCount = 0;
+-    } catch (err) {
++      let foundBlock = /\{/.test(line);
+-      console.warn('TS/JS AST removal failed, falling back to heuristic remover:', (err as Error).message);
++            if (foundBlock) {
+-      // fall through to heuristic
++        for (let j = i; j < lines.length; j++) {
+-    }
++          const l = lines[j];
+-  }
++          for (const ch of l) {
+-
++            if (ch === '{') braceCount++;
+-  const startLineIdx = item.lineNumber - 1;
++            if (ch === '}') braceCount--;
+-  const lines = source.split('\n');
++          }
+-  // find start index of JSDoc before startLineIdx
++          if (braceCount <= 0) {
+-  let start = startLineIdx;
++            declEnd = j;
+-  while (start >= 0 && /\*\*/.test(lines[start]) === false && /\/\*/.test(lines[start]) === false) {
++            break;
+-    start--;
++          }
+-  }
++        }
+-  if (start < 0) start = item.lineNumber - 1;
++        // If the block opened and closed on the same line, capture that line
+-
++        if (declEnd === -1 && braceCount === 0) declEnd = i;
+-  // find a declaration following the comment: function, class, export, const/let/var assignment
++      } else {
+-  let declStart = -1;
++        // not a block (e.g., export default foo; or single-line assignment) — find semicolon line
+-  let declEnd = -1;
++        for (let j = i; j < Math.min(i + 6, lines.length); j++) {
+-
++          if (/;\s*$/.test(lines[j]) || lines[j].trim() === '') {
+-  const declRegex = /(?:export\s+default\s+function|export\s+function|export\s+default|export\s+const|export\s+class|function\s+|class\s+|(?:const|let|var)\s+[A-Za-z0-9_]+\s*=)/i;
++            declEnd = j;
+-
++            break;
+-  for (let i = start; i < lines.length; i++) {
++          }
+-    const line = lines[i];
++        }
+-    if (declRegex.test(line)) {
++        if (declEnd === -1) declEnd = i;
+-      declStart = i;
++      }
+-      // compute end by brace matching if block, otherwise end at semicolon or same line
++      break;
+-      let braceCount = 0;
++    }
+-      let foundBlock = /\{/.test(line);
++  }
+-            if (foundBlock) {
++
+-        for (let j = i; j < lines.length; j++) {
++  // If we didn't find a declaration, fall back to simple brace search to remove a following block
+-          const l = lines[j];
++  let startRemove = start;
+-          for (const ch of l) {
++  let endRemove = declEnd !== -1 ? declEnd : Math.min(start + 6, lines.length - 1);
+-            if (ch === '{') braceCount++;
++
+-            if (ch === '}') braceCount--;
++  // If a declaration was found and it's before the start (rare), adjust
+-          }
++  if (declStart !== -1 && declStart < start) startRemove = declStart;
+-          if (braceCount <= 0) {
++
+-            declEnd = j;
++  // Ensure we remove at least the comment and the declaration area
+-            break;
++  if (declStart !== -1) startRemove = Math.min(start, declStart);
+-          }
++
+-        }
++  const before = lines.slice(0, startRemove).join('\n');
+-        // If the block opened and closed on the same line, capture that line
++  const after = lines.slice(endRemove + 1).join('\n');
+-        if (declEnd === -1 && braceCount === 0) declEnd = i;
++  return before + '\n' + after;
+-      } else {
++
+-        // not a block (e.g., export default foo; or single-line assignment) — find semicolon line
++  const before = lines.slice(0, start).join('\n');
+-        for (let j = i; j < Math.min(i + 6, lines.length); j++) {
++  const after = lines.slice(end + 1).join('\n');
+-          if (/;\s*$/.test(lines[j]) || lines[j].trim() === '') {
++  return before + '\n' + after;
+-            declEnd = j;
++}
+-            break;
++
+-          }
++export async function createDeletionPR(item: BuriedItem, options: PROptions = {}): Promise<{ prUrl?: string; prNumber?: number } | null> {
+-        }
++  const root = path.resolve(options.root || '.');
+-        if (declEnd === -1) declEnd = i;
++  const filePath = path.resolve(item.filePath);
+-      }
++  const git = simpleGit(root);
+-      break;
++  const branch = `deadcode-funeral/remove-${sanitizeBranchName(item.functionName)}-${(item.expiry instanceof Date && !isNaN(item.expiry.getTime())) ? item.expiry.toISOString().slice(0,10) : 'no-date'}`;
+-    }
++
+-  }
++  try {
+-
++    // Safety: ensure working tree is clean before making changes
+-  // If we didn't find a declaration, fall back to simple brace search to remove a following block
++    const status = await git.status();
+-  let startRemove = start;
++    if (status.files.length > 0) {
+-  let endRemove = declEnd !== -1 ? declEnd : Math.min(start + 6, lines.length - 1);
++      console.warn('Working tree is not clean. Aborting PR creation to avoid unintended commits.');
+-
++      return null;
+-  // If a declaration was found and it's before the start (rare), adjust
++    }
+-  if (declStart !== -1 && declStart < start) startRemove = declStart;
++
+-
++    // Read source and prepare new content
+-  // Ensure we remove at least the comment and the declaration area
++    const src = fs.readFileSync(filePath, 'utf8');
+-  if (declStart !== -1) startRemove = Math.min(start, declStart);
++    const newSrc = removeBuriedCode(src, item);
+ 
+-  const before = lines.slice(0, startRemove).join('\n');
++    // Safety: check that the change is not unexpectedly large (prevent mass deletions)
+-  const after = lines.slice(endRemove + 1).join('\n');
++    const removedLines = src.split('\n').length - newSrc.split('\n').length;
+-  return before + '\n' + after;
++    const removedRatio = removedLines / Math.max(1, src.split('\n').length);
+-
++    if (removedRatio > 0.5) {
+-  const before = lines.slice(0, start).join('\n');
++      console.warn(`Change removes ${Math.round(removedRatio * 100)}% of the file; aborting to avoid dangerous mass deletions.`);
+-  const after = lines.slice(end + 1).join('\n');
++      return null;
+-  return before + '\n' + after;
++    }
+-}
++
+-
++    if (options.dryRun) {
+-export async function createDeletionPR(item: BuriedItem, options: PROptions = {}): Promise<{ prUrl?: string; prNumber?: number } | null> {
++      console.log(`[dry-run] Would create branch ${branch} and remove ${item.functionName} in ${filePath}`);
+-  const root = path.resolve(options.root || '.');
++      return null;
+-  const filePath = path.resolve(item.filePath);
++    }
+-  const git = simpleGit(root);
++
+-  const branch = `deadcode-funeral/remove-${sanitizeBranchName(item.functionName)}-${(item.expiry instanceof Date && !isNaN(item.expiry.getTime())) ? item.expiry.toISOString().slice(0,10) : 'no-date'}`;
++    // create branch, write file, commit, push
+-
++    // Determine default branch from remote via octokit if token present
+-  try {
++    let baseBranch = 'main';
+-    // Safety: ensure working tree is clean before making changes
++    if (options.githubToken) {
+-    const status = await git.status();
++      try {
+-    if (status.files.length > 0) {
++        const octoTemp = new Octokit({ auth: options.githubToken });
+-      console.warn('Working tree is not clean. Aborting PR creation to avoid unintended commits.');
++        if (!options.owner || !options.repo) {
+-      return null;
++          const remotes = await git.getRemotes(true);
+-    }
++          const origin = remotes.find(r => r.name === 'origin') || remotes[0];
+-
++          if (origin && origin.refs && origin.refs.fetch) {
+-    // Read source and prepare new content
++            const m = origin.refs.fetch.match(/[:\/]([^/:]+)\/([^/.]+)(?:\.git)?$/);
+-    const src = fs.readFileSync(filePath, 'utf8');
++            if (m) {
+-    const newSrc = removeBuriedCode(src, item);
++              options.owner = options.owner || m[1];
+-
++              options.repo = options.repo || m[2];
+-    // Safety: check that the change is not unexpectedly large (prevent mass deletions)
++            }
+-    const removedLines = src.split('\n').length - newSrc.split('\n').length;
++          }
+-    const removedRatio = removedLines / Math.max(1, src.split('\n').length);
++        }
+-    if (removedRatio > 0.5) {
++        if (options.owner && options.repo) {
+-      console.warn(`Change removes ${Math.round(removedRatio * 100)}% of the file; aborting to avoid dangerous mass deletions.`);
++          const repoInfo = await octoTemp.repos.get({ owner: options.owner, repo: options.repo });
+-      return null;
++          baseBranch = repoInfo.data.default_branch || baseBranch;
+-    }
++        }
+-
++      } catch (err) {
+-    if (options.dryRun) {
++        // ignore and keep default
+-      console.log(`[dry-run] Would create branch ${branch} and remove ${item.functionName} in ${filePath}`);
++      }
+-      return null;
++    }
+-    }
++
+-
++    // Checkout base branch and create new branch from it
+-    // create branch, write file, commit, push
++    await git.fetch('origin', baseBranch);
+-    // Determine default branch from remote via octokit if token present
++    await git.checkout(baseBranch);
+-    let baseBranch = 'main';
++    await git.pull('origin', baseBranch);
+-    if (options.githubToken) {
++    await git.checkoutLocalBranch(branch);
+-      try {
++    fs.writeFileSync(filePath, newSrc, 'utf8');
+-        const octoTemp = new Octokit({ auth: options.githubToken });
++    await git.add(path.relative(root, filePath));
+-        if (!options.owner || !options.repo) {
++    await git.commit(`chore: remove dead code ${item.functionName} (scheduled expiry ${item.expiry?.toISOString?.().slice(0,10)})`);
+-          const remotes = await git.getRemotes(true);
++    await git.push('origin', branch);
+-          const origin = remotes.find(r => r.name === 'origin') || remotes[0];
++
+-          if (origin && origin.refs && origin.refs.fetch) {
++    // create PR via octokit
+-            const m = origin.refs.fetch.match(/[:\/]([^/:]+)\/([^/.]+)(?:\.git)?$/);
++    if (!options.githubToken) {
+-            if (m) {
++      console.warn('No github token provided — PR will not be created.');
+-              options.owner = options.owner || m[1];
++      return null;
+-              options.repo = options.repo || m[2];
++    }
+-            }
++
+-          }
++    const octo = new Octokit({ auth: options.githubToken });
+-        }
++
+-        if (options.owner && options.repo) {
++    // get repo info if not provided
+-          const repoInfo = await octoTemp.repos.get({ owner: options.owner, repo: options.repo });
++    let owner = options.owner;
+-          baseBranch = repoInfo.data.default_branch || baseBranch;
++    let repo = options.repo;
+-        }
++    if (!owner || !repo) {
+-      } catch (err) {
++      // attempt to infer from git remote
+-        // ignore and keep default
++      const remotes = await git.getRemotes(true);
+-      }
++      const origin = remotes.find(r => r.name === 'origin') || remotes[0];
+-    }
++      if (origin && origin.refs && origin.refs.fetch) {
+-
++        const m = origin.refs.fetch.match(/[:\/]([^/:]+)\/([^/.]+)(?:\.git)?$/);
+-    // Checkout base branch and create new branch from it
++        if (m) {
+-    await git.fetch('origin', baseBranch);
++          owner = owner || m[1];
+-    await git.checkout(baseBranch);
++          repo = repo || m[2];
+-    await git.pull('origin', baseBranch);
++        }
+-    await git.checkoutLocalBranch(branch);
++      }
+-    fs.writeFileSync(filePath, newSrc, 'utf8');
++    }
+-    await git.add(path.relative(root, filePath));
++
+-    await git.commit(`chore: remove dead code ${item.functionName} (scheduled expiry ${item.expiry?.toISOString?.().slice(0,10)})`);
++    if (!owner || !repo) {
+-    await git.push('origin', branch);
++      console.warn('Unable to determine owner/repo for creating PR.');
+-
++      return null;
+-    // create PR via octokit
++    }
+-    if (!options.githubToken) {
++
+-      console.warn('No github token provided — PR will not be created.');
++    // create PR
+-      return null;
++    const title = `⚰️ [DeadCode Funeral] Remove ${item.functionName} — expired ${(item.expiry instanceof Date && !isNaN(item.expiry.getTime())) ? item.expiry.toISOString().slice(0,10) : 'unknown'}`;
+-    }
++    const body = `Reason: ${item.reason || 'n/a'}\nMigration: ${item.migration || 'n/a'}\nFile: ${path.relative(root, filePath)}\nConfirmed no usages found.`;
+ 
+-    const octo = new Octokit({ auth: options.githubToken });
++    const prResp = await octo.pulls.create({ owner, repo, title, head: branch, base: baseBranch, body });
+ 
+-    // get repo info if not provided
++    // add label
+-    let owner = options.owner;
++    try {
+-    let repo = options.repo;
++      await octo.issues.addLabels({ owner, repo, issue_number: prResp.data.number, labels: ['dead-code'] });
+-    if (!owner || !repo) {
++    } catch (err) {
+-      // attempt to infer from git remote
++      // non-fatal
+-      const remotes = await git.getRemotes(true);
++      console.warn('Failed to add label:', (err as Error).message);
+-      const origin = remotes.find(r => r.name === 'origin') || remotes[0];
++    }
+-      if (origin && origin.refs && origin.refs.fetch) {
++
+-        const m = origin.refs.fetch.match(/[:\/]([^/:]+)\/([^/.]+)(?:\.git)?$/);
++    // attempt to assign the original author if available
+-        if (m) {
++    if (item.author) {
+-          owner = owner || m[1];
++      try {
+-          repo = repo || m[2];
++        await octo.issues.addAssignees({ owner, repo, issue_number: prResp.data.number, assignees: [item.author.replace(/^@/, '')] });
+-        }
++      } catch (err) {
+-      }
++        // ignore
+-    }
++      }
+-
++    }
+-    if (!owner || !repo) {
++
+-      console.warn('Unable to determine owner/repo for creating PR.');
++    console.log(`Created PR: ${prResp.data.html_url}`);
+-      return null;
++    return { prUrl: prResp.data.html_url, prNumber: prResp.data.number };
+-    }
++  } catch (err) {
+-
++    console.warn('Failed to create deletion PR:', (err as Error).message);
+-    // create PR
++    return null;
+-    const title = `⚰️ [DeadCode Funeral] Remove ${item.functionName} — expired ${(item.expiry instanceof Date && !isNaN(item.expiry.getTime())) ? item.expiry.toISOString().slice(0,10) : 'unknown'}`;
++  }
+-    const body = `Reason: ${item.reason || 'n/a'}\nMigration: ${item.migration || 'n/a'}\nFile: ${path.relative(root, filePath)}\nConfirmed no usages found.`;
++}
+ 
+-    const prResp = await octo.pulls.create({ owner, repo, title, head: branch, base: baseBranch, body });
++export default { createDeletionPR };
+-
++
+-    // add label
+-    try {
+-      await octo.issues.addLabels({ owner, repo, issue_number: prResp.data.number, labels: ['dead-code'] });
+-    } catch (err) {
+-      // non-fatal
+-      console.warn('Failed to add label:', (err as Error).message);
+-    }
+-
+-    // attempt to assign the original author if available
+-    if (item.author) {
+-      try {
+-        await octo.issues.addAssignees({ owner, repo, issue_number: prResp.data.number, assignees: [item.author.replace(/^@/, '')] });
+-      } catch (err) {
+-        // ignore
+-      }
+-    }
+-
+-    console.log(`Created PR: ${prResp.data.html_url}`);
+-    return { prUrl: prResp.data.html_url, prNumber: prResp.data.number };
+-  } catch (err) {
+-    console.warn('Failed to create deletion PR:', (err as Error).message);
+-    return null;
+-  }
+-}
+-
+-export default { createDeletionPR };
+-

@@ -1,0 +1,243 @@
+--- original
++++ modified
+-/**
++
+- * C# parser using tree-sitter-c-sharp when available, with a safe fallback.
++
+- *
++function fallback(filePath: string): BuriedItem[] {
+- * This scans for attribute nodes named `DeadCode` (or `DeadCodeAttribute`) and
++  const abs = path.resolve(filePath);
+- * extracts named arguments like expiry, reason, migration, ticket.
++  const src = fs.readFileSync(abs, 'utf8');
+- */
++  const results: BuriedItem[] = [];
+-
++  // Heuristic: find occurrences like [DeadCode(...)] using regex
+-import * as fs from 'fs';
++  // Accept DeadCode and DeadCodeAttribute, case-insensitive
+-import * as path from 'path';
++  const re = /\[(?:DeadCode|DeadCodeAttribute)\s*\(([^\)]*)\)\s*\]/gi;
+-
++  let m: RegExpExecArray | null;
+-export interface BuriedItem {
++  while ((m = re.exec(src))) {
+-  filePath: string;
++    const argsText = m[1] || '';
+-  lineNumber: number;
++    const startIdx = m.index;
+-  functionName: string;
++    const after = src.slice(m.index + m[0].length, m.index + m[0].length + 400);
+-  language: 'csharp';
++    const nameMatch = after.match(/([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+-  expiry: Date;
++    const lineNumber = src.slice(0, startIdx).split('\n').length;
+-  reason: string;
++    const { expiry, reason, migration, ticket } = extractArgs(argsText || '');
+-  migration?: string;
++    const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
+-  ticket?: string;
++    const name = nameMatch ? nameMatch[1] : 'unknown';
+-  author?: string;
++    results.push({ filePath: abs, lineNumber, functionName: name, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
+-}
++  }
+-
++  return results;
+-function extractArgs(text: string) {
++}
+-  const pick = (key: string) => {
++
+-    const pattern = `${key}\\s*[:=]?\\s*\\"([^\\"]+)\\"`;
++export function parseFile(filePath: string): BuriedItem[] {
+-    const re = new RegExp(pattern, 'i');
++  // Try tree-sitter-based extraction first (best-effort). If tree-sitter is
+-    const m = text.match(re);
++  // not available or fails, fall back to the heuristic textual parser.
+-    return m ? m[1] : undefined;
++  try {
+-  };
++    // eslint-disable-next-line @typescript-eslint/no-var-requires
+-  return {
++    const Parser = require('tree-sitter');
+-    expiry: pick('expiry'),
++    // eslint-disable-next-line @typescript-eslint/no-var-requires
+-    reason: pick('reason'),
++    const CSharp = require('tree-sitter-c-sharp');
+-    migration: pick('migration'),
++
+-    ticket: pick('ticket'),
++    const abs = path.resolve(filePath);
+-  };
++    const src = fs.readFileSync(abs, 'utf8');
+-}
++    const parser = new Parser();
+-
++    parser.setLanguage(CSharp);
+-function fallback(filePath: string): BuriedItem[] {
++    const tree = parser.parse(src);
+-  const abs = path.resolve(filePath);
++    const results: BuriedItem[] = [];
+-  const src = fs.readFileSync(abs, 'utf8');
++
+-  const results: BuriedItem[] = [];
++    const visit = (node: any) => {
+-  // Heuristic: find occurrences like [DeadCode(...)] using regex
++      if (!node) return;
+-  // Accept DeadCode and DeadCodeAttribute, case-insensitive
++      if (node.type === 'attribute') {
+-  const re = /\[(?:DeadCode|DeadCodeAttribute)\s*\(([^\)]*)\)\s*\]/gi;
++        const nameNode = node.childForFieldName && node.childForFieldName('name');
+-  let m: RegExpExecArray | null;
++        const name = nameNode ? src.slice(nameNode.startIndex, nameNode.endIndex) : '';
+-  while ((m = re.exec(src))) {
++        if (/DeadCode/i.test(name) || /DeadCodeAttribute/i.test(name)) {
+-    const argsText = m[1] || '';
++          // find containing declaration
+-    const startIdx = m.index;
++          let decl: any = node.parent;
+-    const after = src.slice(m.index + m[0].length, m.index + m[0].length + 400);
++          while (decl && !/method_declaration|constructor_declaration|class_declaration|property_declaration|field_declaration/.test(decl.type)) {
+-    const nameMatch = after.match(/([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
++            decl = decl.parent;
+-    const lineNumber = src.slice(0, startIdx).split('\n').length;
++          }
+-    const { expiry, reason, migration, ticket } = extractArgs(argsText || '');
++
+-    const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
++          let targetName = 'unknown';
+-    const name = nameMatch ? nameMatch[1] : 'unknown';
++          let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
+-    results.push({ filePath: abs, lineNumber, functionName: name, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
++          if (decl) {
+-  }
++            const id = decl.childForFieldName && decl.childForFieldName('name');
+-  return results;
++            if (id) targetName = src.slice(id.startIndex, id.endIndex);
+-}
++            if (decl.startPosition) lineNumber = decl.startPosition.row + 1;
+-
++          }
+-export function parseFile(filePath: string): BuriedItem[] {
++
+-  // Try tree-sitter-based extraction first (best-effort). If tree-sitter is
++          const argsNode = node.childForFieldName && node.childForFieldName('argument_list');
+-  // not available or fails, fall back to the heuristic textual parser.
++          const argText = argsNode ? src.slice(argsNode.startIndex, argsNode.endIndex) : src.slice(node.startIndex, node.endIndex);
+-  try {
++          const { expiry, reason, migration, ticket } = extractArgs(argText);
+-    // eslint-disable-next-line @typescript-eslint/no-var-requires
++          const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
+-    const Parser = require('tree-sitter');
++
+-    // eslint-disable-next-line @typescript-eslint/no-var-requires
++          results.push({ filePath: abs, lineNumber, functionName: targetName, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
+-    const CSharp = require('tree-sitter-c-sharp');
++        }
+-
++      }
+-    const abs = path.resolve(filePath);
++
+-    const src = fs.readFileSync(abs, 'utf8');
++      if (node.namedChildren && node.namedChildren.length) {
+-    const parser = new Parser();
++        for (const c of node.namedChildren) visit(c);
+-    parser.setLanguage(CSharp);
++      }
+-    const tree = parser.parse(src);
++    };
+-    const results: BuriedItem[] = [];
++
+-
++    visit(tree.rootNode);
+-    const visit = (node: any) => {
++
+-      if (!node) return;
++    // If tree-sitter didn't find any names, fall back to textual heuristic
+-      if (node.type === 'attribute') {
++    if (!results.length) return fallback(filePath);
+-        const nameNode = node.childForFieldName && node.childForFieldName('name');
++
+-        const name = nameNode ? src.slice(nameNode.startIndex, nameNode.endIndex) : '';
++    // Post-process unknown names
+-        if (/DeadCode/i.test(name) || /DeadCodeAttribute/i.test(name)) {
++    for (const r of results) {
+-          // find containing declaration
++      if (r.functionName === 'unknown') {
+-          let decl: any = node.parent;
++        try {
+-          while (decl && !/method_declaration|constructor_declaration|class_declaration|property_declaration|field_declaration/.test(decl.type)) {
++          const lines = src.split('\n');
+-            decl = decl.parent;
++          const startIdx = Math.max(0, (r.lineNumber || 1) - 1);
+-          }
++          const window = lines.slice(startIdx, startIdx + 8).join('\n');
+-
++          const m = window.match(/([A-Za-z0-9_]+)\s*\(/);
+-          let targetName = 'unknown';
++          if (m) r.functionName = m[1];
+-          let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
++        } catch (err) {
+-          if (decl) {
++          // ignore
+-            const id = decl.childForFieldName && decl.childForFieldName('name');
++        }
+-            if (id) targetName = src.slice(id.startIndex, id.endIndex);
++      }
+-            if (decl.startPosition) lineNumber = decl.startPosition.row + 1;
++    }
+-          }
++
+-
++    return results;
+-          const argsNode = node.childForFieldName && node.childForFieldName('argument_list');
++  } catch (err) {
+-          const argText = argsNode ? src.slice(argsNode.startIndex, argsNode.endIndex) : src.slice(node.startIndex, node.endIndex);
++    // tree-sitter not available or parse error — fallback to regex-based parser
+-          const { expiry, reason, migration, ticket } = extractArgs(argText);
++    return fallback(filePath);
+-          const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
++  }
+-
++}
+-          results.push({ filePath: abs, lineNumber, functionName: targetName, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
++
+-        }
++export default { parseFile };
+-      }
++
+-
+-      if (node.namedChildren && node.namedChildren.length) {
+-        for (const c of node.namedChildren) visit(c);
+-      }
+-    };
+-
+-    visit(tree.rootNode);
+-
+-    // If tree-sitter didn't find any names, fall back to textual heuristic
+-    if (!results.length) return fallback(filePath);
+-
+-    // Post-process unknown names
+-    for (const r of results) {
+-      if (r.functionName === 'unknown') {
+-        try {
+-          const lines = src.split('\n');
+-          const startIdx = Math.max(0, (r.lineNumber || 1) - 1);
+-          const window = lines.slice(startIdx, startIdx + 8).join('\n');
+-          const m = window.match(/([A-Za-z0-9_]+)\s*\(/);
+-          if (m) r.functionName = m[1];
+-        } catch (err) {
+-          // ignore
+-        }
+-      }
+-    }
+-
+-    return results;
+-  } catch (err) {
+-    // tree-sitter not available or parse error — fallback to regex-based parser
+-    return fallback(filePath);
+-  }
+-}
+-
+-export default { parseFile };
+-

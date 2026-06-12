@@ -1,0 +1,128 @@
+--- original
++++ modified
+ "use strict";
+-/**
++var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+- * Python parser stub
++    Object.defineProperty(o, "default", { enumerable: true, value: v });
+- * NOTE: For the initial implementation this is a simple heuristic parser
++}) : function(o, v) {
+- * that looks for @bury(...) decorators. A full implementation would use a
++    o["default"] = v;
+- * proper Python parser (tree-sitter-python) to reliably extract nodes.
++});
+- */
++var __importStar = (this && this.__importStar) || (function () {
+-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
++    var ownKeys = function(o) {
+-    if (k2 === undefined) k2 = k;
++        ownKeys = Object.getOwnPropertyNames || function (o) {
+-    var desc = Object.getOwnPropertyDescriptor(m, k);
++            var ar = [];
+-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
++            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+-      desc = { enumerable: true, get: function() { return m[k]; } };
++            return ar;
+-    }
++        };
+-    Object.defineProperty(o, k2, desc);
++        return ownKeys(o);
+-}) : (function(o, m, k, k2) {
++    };
+-    if (k2 === undefined) k2 = k;
++    return function (mod) {
+-    o[k2] = m[k];
++        if (mod && mod.__esModule) return mod;
+-}));
++        var result = {};
+-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
++        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+-    Object.defineProperty(o, "default", { enumerable: true, value: v });
++        __setModuleDefault(result, mod);
+-}) : function(o, v) {
++        return result;
+-    o["default"] = v;
++    };
+-});
++})();
+-var __importStar = (this && this.__importStar) || (function () {
++Object.defineProperty(exports, "__esModule", { value: true });
+-    var ownKeys = function(o) {
++exports.parseFile = parseFile;
+-        ownKeys = Object.getOwnPropertyNames || function (o) {
++const fs = __importStar(require("fs"));
+-            var ar = [];
++const path = __importStar(require("path"));
+-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
++function parseFile(filePath) {
+-            return ar;
++    const abs = path.resolve(filePath);
+-        };
++    const src = fs.readFileSync(abs, 'utf8');
+-        return ownKeys(o);
++    const results = [];
+-    };
++    const re = /@bury\s*\(([^\)]*)\)\s*\ndef\s+([A-Za-z0-9_]+)\s*\(/g;
+-    return function (mod) {
++    let m;
+-        if (mod && mod.__esModule) return mod;
++    while ((m = re.exec(src))) {
+-        var result = {};
++        const args = m[1];
+-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
++        const name = m[2];
+-        __setModuleDefault(result, mod);
++        const lineNumber = src.slice(0, m.index).split('\n').length;
+-        return result;
++        const expiryMatch = args.match(/expiry\s*=\s*["']([^"']+)["']/);
+-    };
++        const reasonMatch = args.match(/reason\s*=\s*["']([^"']+)["']/);
+-})();
++        const ticketMatch = args.match(/ticket\s*=\s*["']([^"']+)["']/);
+-Object.defineProperty(exports, "__esModule", { value: true });
++        const expiry = expiryMatch ? new Date(expiryMatch[1]) : new Date(NaN);
+-exports.parseFile = parseFile;
++        results.push({
+-const fs = __importStar(require("fs"));
++            filePath: abs,
+-const path = __importStar(require("path"));
++            lineNumber,
+-function parseFile(filePath) {
++            functionName: name,
+-    const abs = path.resolve(filePath);
++            language: 'python',
+-    const src = fs.readFileSync(abs, 'utf8');
++            expiry,
+-    const results = [];
++            reason: reasonMatch ? reasonMatch[1] : '',
+-    const re = /@bury\s*\(([^\)]*)\)\s*\ndef\s+([A-Za-z0-9_]+)\s*\(/g;
++            ticket: ticketMatch ? ticketMatch[1] : undefined,
+-    let m;
++        });
+-    while ((m = re.exec(src))) {
++    }
+-        const args = m[1];
++    return results;
+-        const name = m[2];
++}
+-        const lineNumber = src.slice(0, m.index).split('\n').length;
++exports.default = { parseFile };
+-        const expiryMatch = args.match(/expiry\s*=\s*["']([^"']+)["']/);
++
+-        const reasonMatch = args.match(/reason\s*=\s*["']([^"']+)["']/);
+-        const ticketMatch = args.match(/ticket\s*=\s*["']([^"']+)["']/);
+-        const expiry = expiryMatch ? new Date(expiryMatch[1]) : new Date(NaN);
+-        results.push({
+-            filePath: abs,
+-            lineNumber,
+-            functionName: name,
+-            language: 'python',
+-            expiry,
+-            reason: reasonMatch ? reasonMatch[1] : '',
+-            ticket: ticketMatch ? ticketMatch[1] : undefined,
+-        });
+-    }
+-    return results;
+-}
+-exports.default = { parseFile };
+-

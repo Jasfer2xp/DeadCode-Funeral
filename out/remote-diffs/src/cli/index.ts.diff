@@ -1,0 +1,257 @@
+--- original
++++ modified
+ #!/usr/bin/env node
+-/**
++
+- * CLI entrypoint
++program.name('deadcode-funeral').description('Schedule your dead code for deletion.').version('1.0.0');
+- * Commands:
++
+- *  - scan
++program
+- *  - report
++  .command('scan')
+- */
++  .description('Scan project and list all tagged items')
+-
++  .option('--path <path>', 'Path to scan', '.')
+-import { Command } from 'commander';
++  .option('--dry-run', 'Preview without action', false)
+-import chalk from 'chalk';
++  .action((opts) => {
+-import * as scanner from '../scanner/index';
++    console.log(chalk.bold('⚰️  DeadCode Funeral — Scanning project...'));
+-import { checkUsage } from '../scanner/usageChecker';
++    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun });
+-import { createDeletionPR } from '../github/prCreator';
++    if (!items.length) {
+-import { createWarningIssue } from '../github/issueCreator';
++      console.log('No buried items found.');
+-import { appendRecord } from '../graveyard/logger';
++      return;
+-
++    }
+-const program = new Command();
++
+-
++    const now = new Date();
+-program.name('deadcode-funeral').description('Schedule your dead code for deletion.').version('1.0.0');
++    const sevenDays = 1000 * 60 * 60 * 24 * 7;
+ 
+-program
++    const expired = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() < now.getTime());
+-  .command('scan')
++    const expiringSoon = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() >= now.getTime() && i.expiry.getTime() - now.getTime() <= sevenDays);
+-  .description('Scan project and list all tagged items')
++    const upcoming = items.filter((i: any) => isNaN(i.expiry.getTime()) || i.expiry.getTime() - now.getTime() > sevenDays);
+-  .option('--path <path>', 'Path to scan', '.')
++
+-  .option('--dry-run', 'Preview without action', false)
++    console.log(`\nFound ${items.length} buried items:\n`);
+-  .action((opts) => {
++
+-    console.log(chalk.bold('⚰️  DeadCode Funeral — Scanning project...'));
++    if (expired.length) {
+-    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun });
++      console.log('  EXPIRED:');
+-    if (!items.length) {
++      for (const it of expired) {
+-      console.log('No buried items found.');
++        console.log(`  ${chalk.red('⚰️')}  ${chalk.bold(it.functionName)}      ${it.filePath}   line ${it.lineNumber}   expired: ${it.expiry.toISOString().slice(0,10)}`);
+-      return;
++      }
+-    }
++      console.log();
+-
++    }
+-    const now = new Date();
++
+-    const sevenDays = 1000 * 60 * 60 * 24 * 7;
++    if (expiringSoon.length) {
+-
++      console.log('  EXPIRING SOON (7 days):');
+-    const expired = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() < now.getTime());
++      for (const it of expiringSoon) {
+-    const expiringSoon = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() >= now.getTime() && i.expiry.getTime() - now.getTime() <= sevenDays);
++        console.log(`  ${chalk.yellow('⚠️')}  ${chalk.bold(it.functionName)}      ${it.filePath}   line ${it.lineNumber}   expires: ${it.expiry.toISOString().slice(0,10)}`);
+-    const upcoming = items.filter((i: any) => isNaN(i.expiry.getTime()) || i.expiry.getTime() - now.getTime() > sevenDays);
++      }
+-
++      console.log();
+-    console.log(`\nFound ${items.length} buried items:\n`);
++    }
+ 
+-    if (expired.length) {
++    if (upcoming.length) {
+-      console.log('  EXPIRED:');
++      console.log('  UPCOMING:');
+-      for (const it of expired) {
++      for (const it of upcoming) {
+-        console.log(`  ${chalk.red('⚰️')}  ${chalk.bold(it.functionName)}      ${it.filePath}   line ${it.lineNumber}   expired: ${it.expiry.toISOString().slice(0,10)}`);
++        const expires = isNaN(it.expiry.getTime()) ? 'unknown' : it.expiry.toISOString().slice(0,10);
+-      }
++        console.log(`  ${chalk.cyan('📅')}  ${chalk.bold(it.functionName)}   ${it.filePath}   line ${it.lineNumber}   expires: ${expires}`);
+-      console.log();
++      }
+-    }
++      console.log();
+-
++    }
+-    if (expiringSoon.length) {
++
+-      console.log('  EXPIRING SOON (7 days):');
++    console.log("Run 'deadcode-funeral open-pr' to create deletion Pull Requests.");
+-      for (const it of expiringSoon) {
++  });
+-        console.log(`  ${chalk.yellow('⚠️')}  ${chalk.bold(it.functionName)}      ${it.filePath}   line ${it.lineNumber}   expires: ${it.expiry.toISOString().slice(0,10)}`);
++
+-      }
++program
+-      console.log();
++  .command('report')
+-    }
++  .description('Full report with expiry status')
+-
++  .option('--path <path>', 'Path to scan', '.')
+-    if (upcoming.length) {
++  .action((opts) => {
+-      console.log('  UPCOMING:');
++    const items = scanner.scan({ root: opts.path });
+-      for (const it of upcoming) {
++    console.log(JSON.stringify(items, null, 2));
+-        const expires = isNaN(it.expiry.getTime()) ? 'unknown' : it.expiry.toISOString().slice(0,10);
++  });
+-        console.log(`  ${chalk.cyan('📅')}  ${chalk.bold(it.functionName)}   ${it.filePath}   line ${it.lineNumber}   expires: ${expires}`);
++
+-      }
++program
+-      console.log();
++  .command('open-pr')
+-    }
++  .description('Open deletion PRs for all expired items')
+-
++  .option('--path <path>', 'Path to scan', '.')
+-    console.log("Run 'deadcode-funeral open-pr' to create deletion Pull Requests.");
++  .option('--token <token>', 'GitHub token')
+-  });
++  .option('--owner <owner>', 'GitHub owner/org')
+-
++  .option('--repo <repo>', 'GitHub repository name')
+-program
++  .option('--dry-run', 'Preview without action', false)
+-  .command('report')
++  .action(async (opts) => {
+-  .description('Full report with expiry status')
++    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun });
+-  .option('--path <path>', 'Path to scan', '.')
++    const now = new Date();
+-  .action((opts) => {
++    const expired = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() < now.getTime());
+-    const items = scanner.scan({ root: opts.path });
++    if (!expired.length) {
+-    console.log(JSON.stringify(items, null, 2));
++      console.log('No expired buried items found.');
+-  });
++      return;
+-
++    }
+-program
++
+-  .command('open-pr')
++    for (const it of expired) {
+-  .description('Open deletion PRs for all expired items')
++      try {
+-  .option('--path <path>', 'Path to scan', '.')
++        const usage = checkUsage(opts.path, it.filePath, it.functionName);
+-  .option('--token <token>', 'GitHub token')
++        if (usage.isUsed) {
+-  .option('--owner <owner>', 'GitHub owner/org')
++          console.log(`Skipping deletion for ${it.functionName} — usage found.`);
+-  .option('--repo <repo>', 'GitHub repository name')
++          // create warning issue instead
+-  .option('--dry-run', 'Preview without action', false)
++          await createWarningIssue(it, { githubToken: opts.token || process.env.GITHUB_TOKEN, owner: opts.owner, repo: opts.repo, dryRun: opts.dryRun });
+-  .action(async (opts) => {
++        } else {
+-    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun });
++          const pr = await createDeletionPR(it, { githubToken: opts.token || process.env.GITHUB_TOKEN, owner: opts.owner, repo: opts.repo, root: opts.path, dryRun: opts.dryRun });
+-    const now = new Date();
++          if (pr && pr.prNumber) {
+-    const expired = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() < now.getTime());
++            appendRecord(it, pr.prNumber, opts.path);
+-    if (!expired.length) {
++          }
+-      console.log('No expired buried items found.');
++        }
+-      return;
++      } catch (err) {
+-    }
++        console.warn('Error processing item', it.functionName, (err as Error).message);
+-
++      }
+-    for (const it of expired) {
++    }
+-      try {
++  });
+-        const usage = checkUsage(opts.path, it.filePath, it.functionName);
++
+-        if (usage.isUsed) {
++program
+-          console.log(`Skipping deletion for ${it.functionName} — usage found.`);
++  .command('warn')
+-          // create warning issue instead
++  .description('Create warning issues for items expiring in N days')
+-          await createWarningIssue(it, { githubToken: opts.token || process.env.GITHUB_TOKEN, owner: opts.owner, repo: opts.repo, dryRun: opts.dryRun });
++  .option('--path <path>', 'Path to scan', '.')
+-        } else {
++  .option('--days <n>', 'Days before expiry to warn', '7')
+-          const pr = await createDeletionPR(it, { githubToken: opts.token || process.env.GITHUB_TOKEN, owner: opts.owner, repo: opts.repo, root: opts.path, dryRun: opts.dryRun });
++  .option('--token <token>', 'GitHub token')
+-          if (pr && pr.prNumber) {
++  .option('--owner <owner>', 'GitHub owner/org')
+-            appendRecord(it, pr.prNumber, opts.path);
++  .option('--repo <repo>', 'GitHub repository')
+-          }
++  .option('--dry-run', 'Preview without action', false)
+-        }
++  .action(async (opts) => {
+-      } catch (err) {
++    const items = scanner.scan({ root: opts.path });
+-        console.warn('Error processing item', it.functionName, (err as Error).message);
++    const now = new Date();
+-      }
++    const days = parseInt(opts.days || '7', 10);
+-    }
++    const ms = days * 24 * 60 * 60 * 1000;
+-  });
++    const toWarn = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() - now.getTime() <= ms && i.expiry.getTime() > now.getTime());
+-
++    for (const it of toWarn) {
+-program
++      await createWarningIssue(it, { githubToken: opts.token || process.env.GITHUB_TOKEN, owner: opts.owner, repo: opts.repo, dryRun: opts.dryRun });
+-  .command('warn')
++    }
+-  .description('Create warning issues for items expiring in N days')
++  });
+-  .option('--path <path>', 'Path to scan', '.')
++
+-  .option('--days <n>', 'Days before expiry to warn', '7')
++program.parse(process.argv);
+-  .option('--token <token>', 'GitHub token')
++
+-  .option('--owner <owner>', 'GitHub owner/org')
+-  .option('--repo <repo>', 'GitHub repository')
+-  .option('--dry-run', 'Preview without action', false)
+-  .action(async (opts) => {
+-    const items = scanner.scan({ root: opts.path });
+-    const now = new Date();
+-    const days = parseInt(opts.days || '7', 10);
+-    const ms = days * 24 * 60 * 60 * 1000;
+-    const toWarn = items.filter((i: any) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() - now.getTime() <= ms && i.expiry.getTime() > now.getTime());
+-    for (const it of toWarn) {
+-      await createWarningIssue(it, { githubToken: opts.token || process.env.GITHUB_TOKEN, owner: opts.owner, repo: opts.repo, dryRun: opts.dryRun });
+-    }
+-  });
+-
+-program.parse(process.argv);
+-

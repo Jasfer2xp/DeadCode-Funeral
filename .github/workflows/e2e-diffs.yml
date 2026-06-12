@@ -1,0 +1,44 @@
+name: Generate Removal Diffs
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  generate-diffs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate diffs
+        run: npm run generate-diffs-cjs -- . out/diffs
+      - name: Upload diffs
+        uses: actions/upload-artifact@v4
+        with:
+          name: removal-diffs
+          path: out/diffs
+
+  open-pr-dryrun:
+    needs: generate-diffs
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' # run interactively
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run open-pr (dry-run)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # open-pr will perform checks and create branches — keep dry-run by default
+          npx ts-node --transpile-only src/cli/index.ts open-pr --path . --dry-run

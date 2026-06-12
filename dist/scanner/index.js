@@ -10,6 +10,7 @@ import { execSync } from 'child_process';
 import * as tsParser from './parsers/typescript';
 import * as pyParser from './parsers/python';
 import * as csParser from './parsers/csharp';
+import * as phpParser from './parsers/php';
 const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**'];
 /**
  * Scan a folder for buried items
@@ -17,7 +18,7 @@ const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**'];
 export function scan(options = { root: '.' }) {
     const root = path.resolve(options.root || '.');
     // Find candidate files
-    const patterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.cs'];
+    const patterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.cs', '**/*.php'];
     const files = patterns
         .map((p) => glob.sync(p, { cwd: root, absolute: true, ignore: IGNORES }))
         .flat();
@@ -30,6 +31,10 @@ export function scan(options = { root: '.' }) {
             }
             else if (file.endsWith('.py')) {
                 const parsed = pyParser.parseFile(file);
+                results.push(...parsed);
+            }
+            else if (file.endsWith('.php')) {
+                const parsed = phpParser.parseFile(file);
                 results.push(...parsed);
             }
             else if (file.endsWith('.cs')) {

@@ -1,0 +1,113 @@
+--- original
++++ modified
+ "use strict";
+-/**
++Object.defineProperty(exports, "__esModule", { value: true });
+- * GitHub Issue creator for warnings
++exports.createWarningIssue = createWarningIssue;
+- */
++const rest_1 = require("@octokit/rest");
+-var __importDefault = (this && this.__importDefault) || function (mod) {
++const simple_git_1 = __importDefault(require("simple-git"));
+-    return (mod && mod.__esModule) ? mod : { "default": mod };
++async function createWarningIssue(item, options = {}) {
+-};
++    if (options.dryRun) {
+-Object.defineProperty(exports, "__esModule", { value: true });
++        console.log(`[dry-run] Would open warning issue for ${item.functionName} in ${item.filePath}`);
+-exports.createWarningIssue = createWarningIssue;
++        return null;
+-const rest_1 = require("@octokit/rest");
++    }
+-const simple_git_1 = __importDefault(require("simple-git"));
++    if (!options.githubToken) {
+-async function createWarningIssue(item, options = {}) {
++        console.warn('No github token provided — skipping warning issue creation.');
+-    if (options.dryRun) {
++        return null;
+-        console.log(`[dry-run] Would open warning issue for ${item.functionName} in ${item.filePath}`);
++    }
+-        return null;
++    const octo = new rest_1.Octokit({ auth: options.githubToken });
+-    }
++    let owner = options.owner;
+-    if (!options.githubToken) {
++    let repo = options.repo;
+-        console.warn('No github token provided — skipping warning issue creation.');
++    const root = options.root || '.';
+-        return null;
++    if (!owner || !repo) {
+-    }
++        try {
+-    const octo = new rest_1.Octokit({ auth: options.githubToken });
++            const git = (0, simple_git_1.default)(root);
+-    let owner = options.owner;
++            const remotes = await git.getRemotes(true);
+-    let repo = options.repo;
++            const origin = remotes.find(r => r.name === 'origin') || remotes[0];
+-    const root = options.root || '.';
++            if (origin && origin.refs && origin.refs.fetch) {
+-    if (!owner || !repo) {
++                const m = origin.refs.fetch.match(/[:\/]([^/:]+)\/([^/.]+)(?:\.git)?$/);
+-        try {
++                if (m) {
+-            const git = (0, simple_git_1.default)(root);
++                    owner = owner || m[1];
+-            const remotes = await git.getRemotes(true);
++                    repo = repo || m[2];
+-            const origin = remotes.find(r => r.name === 'origin') || remotes[0];
++                }
+-            if (origin && origin.refs && origin.refs.fetch) {
++            }
+-                const m = origin.refs.fetch.match(/[:\/]([^/:]+)\/([^/.]+)(?:\.git)?$/);
++        }
+-                if (m) {
++        catch (err) {
+-                    owner = owner || m[1];
++            // ignore and proceed to validation below
+-                    repo = repo || m[2];
++        }
+-                }
++    }
+-            }
++    if (!owner || !repo) {
+-        }
++        console.warn('Unable to determine owner/repo; aborting issue creation.');
+-        catch (err) {
++        return null;
+-            // ignore and proceed to validation below
++    }
+-        }
++    const title = `⚠️ DeadCode Funeral Warning: ${item.functionName} expires in 7 days`;
+-    }
++    const body = `File: ${item.filePath}\nLine: ${item.lineNumber}\nReason: ${item.reason || 'n/a'}\nMigration: ${item.migration || 'n/a'}\n${item.author ? `@${item.author}` : ''}`;
+-    if (!owner || !repo) {
++    try {
+-        console.warn('Unable to determine owner/repo; aborting issue creation.');
++        const res = await octo.issues.create({ owner, repo, title, body });
+-        return null;
++        console.log(`Created warning issue: ${res.data.html_url}`);
+-    }
++        return { url: res.data.html_url };
+-    const title = `⚠️ DeadCode Funeral Warning: ${item.functionName} expires in 7 days`;
++    }
+-    const body = `File: ${item.filePath}\nLine: ${item.lineNumber}\nReason: ${item.reason || 'n/a'}\nMigration: ${item.migration || 'n/a'}\n${item.author ? `@${item.author}` : ''}`;
++    catch (err) {
+-    try {
++        console.warn('Failed to create issue:', err.message);
+-        const res = await octo.issues.create({ owner, repo, title, body });
++        return null;
+-        console.log(`Created warning issue: ${res.data.html_url}`);
++    }
+-        return { url: res.data.html_url };
++}
+-    }
++exports.default = { createWarningIssue };
+-    catch (err) {
++
+-        console.warn('Failed to create issue:', err.message);
+-        return null;
+-    }
+-}
+-exports.default = { createWarningIssue };
+-

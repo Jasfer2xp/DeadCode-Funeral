@@ -1,0 +1,306 @@
+--- original
++++ modified
+-/**
++
+- * TypeScript / JavaScript annotation parser using tree-sitter when available.
++import * as fs from 'fs';
+- *
++import * as path from 'path';
+- * This implementation will try to use tree-sitter and the official
++
+- * tree-sitter-typescript grammar to find comment nodes containing
++export interface BuriedItem {
+- * `@funeral` and then locate the following function / class node to
++  filePath: string;
+- * extract the identifier and location. If tree-sitter is not available
++  lineNumber: number;
+- * it falls back to the original regex-based heuristic.
++  functionName: string;
+- */
++  language: 'typescript' | 'javascript';
+-
++  expiry: Date;
+-import * as fs from 'fs';
++  reason: string;
+-import * as path from 'path';
++  migration?: string;
+-
++  ticket?: string;
+-export interface BuriedItem {
++  author?: string;
+-  filePath: string;
++}
+-  lineNumber: number;
++
+-  functionName: string;
++function extractFields(block: string) {
+-  language: 'typescript' | 'javascript';
++  const pick = (key: string) => {
+-  expiry: Date;
++    const pattern = `${key}\\s*[:=]\\s*["']([^"']+)["']`;
+-  reason: string;
++    const re = new RegExp(pattern, 'i');
+-  migration?: string;
++    const m = block.match(re);
+-  ticket?: string;
++    return m ? m[1] : undefined;
+-  author?: string;
++  };
+-}
++  const expiry = pick('expiry');
+-
++  const reason = pick('reason');
+-function extractFields(block: string) {
++  const migration = pick('migration');
+-  const pick = (key: string) => {
++  const ticket = pick('ticket');
+-    const pattern = `${key}\\s*[:=]\\s*["']([^"']+)["']`;
++  return { expiry, reason, migration, ticket };
+-    const re = new RegExp(pattern, 'i');
++}
+-    const m = block.match(re);
++
+-    return m ? m[1] : undefined;
++// Fallback simple parser (previous heuristic) kept for environments without tree-sitter
+-  };
++function fallbackParse(filePath: string): BuriedItem[] {
+-  const expiry = pick('expiry');
++  const abs = path.resolve(filePath);
+-  const reason = pick('reason');
++  const src = fs.readFileSync(abs, 'utf8');
+-  const migration = pick('migration');
++  const results: BuriedItem[] = [];
+-  const ticket = pick('ticket');
++  const jsdocRe = /\/\*\*[\s\S]*?\*\//g;
+-  return { expiry, reason, migration, ticket };
++  let m: RegExpExecArray | null;
+-}
++  while ((m = jsdocRe.exec(src))) {
+-
++    const block = m[0];
+-// Fallback simple parser (previous heuristic) kept for environments without tree-sitter
++    if (/\@funeral\b/i.test(block)) {
+-function fallbackParse(filePath: string): BuriedItem[] {
++      const { expiry, reason, migration, ticket } = extractFields(block);
+-  const abs = path.resolve(filePath);
++      const startIndex = m.index;
+-  const src = fs.readFileSync(abs, 'utf8');
++      const lineNumber = src.slice(0, startIndex).split('\n').length;
+-  const results: BuriedItem[] = [];
++      const after = src.slice(m.index + m[0].length);
+-  const jsdocRe = /\/\*\*[\s\S]*?\*\//g;
++      const fnDecl = after.match(/function\s+([A-Za-z0-9_\$]+)\s*\(/) || after.match(/class\s+([A-Za-z0-9_\$]+)/) || after.match(/(?:const|let|var)\s+([A-Za-z0-9_\$]+)\s*=/);
+-  let m: RegExpExecArray | null;
++      const functionName = fnDecl ? fnDecl[1] : 'unknown';
+-  while ((m = jsdocRe.exec(src))) {
++      let expiryDate: Date = new Date(NaN);
+-    const block = m[0];
++      if (expiry) {
+-    if (/\@funeral\b/i.test(block)) {
++        const d = new Date(expiry);
+-      const { expiry, reason, migration, ticket } = extractFields(block);
++        if (!isNaN(d.getTime())) expiryDate = d;
+-      const startIndex = m.index;
++      }
+-      const lineNumber = src.slice(0, startIndex).split('\n').length;
++      results.push({ filePath: abs, lineNumber, functionName, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
+-      const after = src.slice(m.index + m[0].length);
++    }
+-      const fnDecl = after.match(/function\s+([A-Za-z0-9_\$]+)\s*\(/) || after.match(/class\s+([A-Za-z0-9_\$]+)/) || after.match(/(?:const|let|var)\s+([A-Za-z0-9_\$]+)\s*=/);
++  }
+-      const functionName = fnDecl ? fnDecl[1] : 'unknown';
++  return results;
+-      let expiryDate: Date = new Date(NaN);
++}
+-      if (expiry) {
++
+-        const d = new Date(expiry);
++export function parseFile(filePath: string): BuriedItem[] {
+-        if (!isNaN(d.getTime())) expiryDate = d;
++  // Try to require tree-sitter and the typescript grammar
+-      }
++  try {
+-      results.push({ filePath: abs, lineNumber, functionName, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
++    // eslint-disable-next-line @typescript-eslint/no-var-requires
+-    }
++    const Parser = require('tree-sitter');
+-  }
++    // tree-sitter-typescript exposes two grammars; prefer 'typescript'
+-  return results;
++    // eslint-disable-next-line @typescript-eslint/no-var-requires
+-}
++    const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx;
+ 
+-export function parseFile(filePath: string): BuriedItem[] {
++    const abs = path.resolve(filePath);
+-  // Try to require tree-sitter and the typescript grammar
++    const src = fs.readFileSync(abs, 'utf8');
+-  try {
++    const parser = new Parser();
+-    // eslint-disable-next-line @typescript-eslint/no-var-requires
++    parser.setLanguage(TsGrammar);
+-    const Parser = require('tree-sitter');
++    const tree = parser.parse(src);
+-    // tree-sitter-typescript exposes two grammars; prefer 'typescript'
++    const cursor = tree.walk();
+-    // eslint-disable-next-line @typescript-eslint/no-var-requires
++
+-    const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx;
++    const results: BuriedItem[] = [];
+ 
+-    const abs = path.resolve(filePath);
++    // Walk all comment nodes and look for @funeral
+-    const src = fs.readFileSync(abs, 'utf8');
++    const visit = (node: any) => {
+-    const parser = new Parser();
++      if (!node) return;
+-    parser.setLanguage(TsGrammar);
++      if (node.type === 'comment') {
+-    const tree = parser.parse(src);
++        const text = src.slice(node.startIndex, node.endIndex);
+-    const cursor = tree.walk();
++        if (/\@funeral\b/i.test(text)) {
+-
++          const { expiry, reason, migration, ticket } = extractFields(text);
+-    const results: BuriedItem[] = [];
++          // find next sibling or following node to determine the function/class name
+-
++          let follow = node.nextSibling;
+-    // Walk all comment nodes and look for @funeral
++          // if not found, walk upward to parent and try nextSibling
+-    const visit = (node: any) => {
++          let parent = node.parent;
+-      if (!node) return;
++          while (!follow && parent) {
+-      if (node.type === 'comment') {
++            follow = parent.nextSibling;
+-        const text = src.slice(node.startIndex, node.endIndex);
++            parent = parent.parent;
+-        if (/\@funeral\b/i.test(text)) {
++          }
+-          const { expiry, reason, migration, ticket } = extractFields(text);
++
+-          // find next sibling or following node to determine the function/class name
++          // If still not found, try to find the next node in tree traversal
+-          let follow = node.nextSibling;
++          if (!follow) {
+-          // if not found, walk upward to parent and try nextSibling
++            const all = tree.rootNode.descendantsOfType ? tree.rootNode.descendantsOfType('*') : null;
+-          let parent = node.parent;
++          }
+-          while (!follow && parent) {
++
+-            follow = parent.nextSibling;
++          let name = 'unknown';
+-            parent = parent.parent;
++          let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
+-          }
++
+-
++          if (follow) {
+-          // If still not found, try to find the next node in tree traversal
++            // check for function_declaration, method_definition, class_declaration, variable_declaration
+-          if (!follow) {
++            const t = follow.type;
+-            const all = tree.rootNode.descendantsOfType ? tree.rootNode.descendantsOfType('*') : null;
++            if (t === 'function_declaration' && follow.childForFieldName) {
+-          }
++              const id = follow.childForFieldName('name');
+-
++              if (id) name = src.slice(id.startIndex, id.endIndex);
+-          let name = 'unknown';
++            } else if (t === 'class_declaration') {
+-          let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
++              const id = follow.childForFieldName('name');
+-
++              if (id) name = src.slice(id.startIndex, id.endIndex);
+-          if (follow) {
++            } else if (t === 'lexical_declaration' || t === 'variable_declaration') {
+-            // check for function_declaration, method_definition, class_declaration, variable_declaration
++              // find identifier child
+-            const t = follow.type;
++              const id = follow.namedChildren && follow.namedChildren.find((c: any) => c.type === 'identifier');
+-            if (t === 'function_declaration' && follow.childForFieldName) {
++              if (id) name = src.slice(id.startIndex, id.endIndex);
+-              const id = follow.childForFieldName('name');
++            } else if (t === 'export_statement') {
+-              if (id) name = src.slice(id.startIndex, id.endIndex);
++              // try to look into export next
+-            } else if (t === 'class_declaration') {
++              const child = follow.namedChildren && follow.namedChildren[0];
+-              const id = follow.childForFieldName('name');
++              if (child && child.type === 'function_declaration') {
+-              if (id) name = src.slice(id.startIndex, id.endIndex);
++                const id = child.childForFieldName && child.childForFieldName('name');
+-            } else if (t === 'lexical_declaration' || t === 'variable_declaration') {
++                if (id) name = src.slice(id.startIndex, id.endIndex);
+-              // find identifier child
++              }
+-              const id = follow.namedChildren && follow.namedChildren.find((c: any) => c.type === 'identifier');
++            }
+-              if (id) name = src.slice(id.startIndex, id.endIndex);
++          }
+-            } else if (t === 'export_statement') {
++
+-              // try to look into export next
++          let expiryDate: Date = new Date(NaN);
+-              const child = follow.namedChildren && follow.namedChildren[0];
++          if (expiry) {
+-              if (child && child.type === 'function_declaration') {
++            const d = new Date(expiry);
+-                const id = child.childForFieldName && child.childForFieldName('name');
++            if (!isNaN(d.getTime())) expiryDate = d;
+-                if (id) name = src.slice(id.startIndex, id.endIndex);
++          }
+-              }
++
+-            }
++          results.push({ filePath: abs, lineNumber, functionName: name, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
+-          }
++        }
+-
++      }
+-          let expiryDate: Date = new Date(NaN);
++
+-          if (expiry) {
++      // visit children
+-            const d = new Date(expiry);
++      if (node.namedChildren && node.namedChildren.length) {
+-            if (!isNaN(d.getTime())) expiryDate = d;
++        for (const c of node.namedChildren) visit(c);
+-          }
++      }
+-
++    };
+-          results.push({ filePath: abs, lineNumber, functionName: name, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
++
+-        }
++    visit(tree.rootNode);
+-      }
++    return results;
+-
++  } catch (err) {
+-      // visit children
++    // If tree-sitter not available or parsing fails, fall back
+-      if (node.namedChildren && node.namedChildren.length) {
++    console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
+-        for (const c of node.namedChildren) visit(c);
++    return fallbackParse(filePath);
+-      }
++  }
+-    };
++}
+ 
+-    visit(tree.rootNode);
++export default { parseFile };
+-    return results;
++
+-  } catch (err) {
+-    // If tree-sitter not available or parsing fails, fall back
+-    console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
+-    return fallbackParse(filePath);
+-  }
+-}
+-
+-export default { parseFile };
+-

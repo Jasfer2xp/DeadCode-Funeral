@@ -70,13 +70,56 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
 
-        const pick = await vscode.window.showQuickPick(['Dry run', 'Create PRs (one-by-one)'], { placeHolder: `Found ${items.length} buried items. How should DeadCode Funeral proceed?` });
+        const pick = await vscode.window.showQuickPick(['Dry run', 'Create PRs (one-by-one)', 'Preview diffs'], { placeHolder: `Found ${items.length} buried items. How should DeadCode Funeral proceed?` });
         if (!pick) return;
 
         for (const it of items) {
           out.appendLine(`Item: ${JSON.stringify(it)}`);
           if (pick === 'Dry run') {
             out.appendLine('[dry-run] would create PR for ' + it.functionName);
+          } else if (pick === 'Preview diffs') {
+            // show unified diff in an untitled read-only editor
+            try {
+              const src = require('fs').readFileSync(it.filePath, 'utf8');
+              const newSrc = prCreator.removeBuriedCode(src, it);
+              const diff = `--- original\n+++ modified\n` + (() => {
+                const o = src.split('\n');
+                const m = newSrc.split('\n');
+                const lines: string[] = [];
+                const max = Math.max(o.length, m.length);
+                for (let i = 0; i < max; i++) {
+                  if (o[i] === m[i]) lines.push(' ' + (o[i] || ''));
+                  else {
+                    if (o[i] !== undefined) lines.push('-' + o[i]);
+                    if (m[i] !== undefined) lines.push('+' + m[i]);
+                  }
+                }
+                return lines.join('\n');
+              })();
+
+              // open two untitled docs and show the side-by-side diff view
+              const left = await vscode.workspace.openTextDocument({ content: src, language: 'plaintext' });
+              const right = await vscode.workspace.openTextDocument({ content: newSrc, language: 'plaintext' });
+              await vscode.commands.executeCommand('vscode.diff', left.uri, right.uri, `${path.basename(it.filePath)} — DeadCode Funeral preview`);
+
+              const create = await vscode.window.showInformationMessage('Create PR for this removal?', 'Create PR', 'Cancel');
+              if (create === 'Create PR') {
+                out.appendLine('Creating PR for ' + it.functionName + '...');
+                try {
+                  const res = await prCreator.createDeletionPR(it, { githubToken: token, root: workspace.uri.fsPath, dryRun: false });
+                  out.appendLine('PR result: ' + JSON.stringify(res));
+                  if (res && res.prUrl) {
+                    const open = await vscode.window.showInformationMessage('PR created: ' + res.prUrl, 'Open PR');
+                    if (open === 'Open PR') vscode.env.openExternal(vscode.Uri.parse(res.prUrl));
+                  }
+                } catch (err: any) {
+                  out.appendLine('Failed to create PR: ' + err.message);
+                }
+              }
+            } catch (err: any) {
+              out.appendLine('Failed to generate diff: ' + err.message);
+              vscode.window.showErrorMessage('Failed to generate diff: ' + err.message);
+            }
           } else {
             out.appendLine('Creating PR for ' + it.functionName + '...');
             try {

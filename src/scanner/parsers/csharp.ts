@@ -22,7 +22,7 @@ export interface BuriedItem {
 
 function extractArgs(text: string) {
   const pick = (key: string) => {
-    const pattern = `${key}\\s*[:=]?\\s*\\"([^\\"]+)\\"`;
+    const pattern = `${key}\\s*[:=]?\\s*["']([^"']+)["']`;
     const re = new RegExp(pattern, 'i');
     const m = text.match(re);
     return m ? m[1] : undefined;
@@ -35,23 +35,31 @@ function extractArgs(text: string) {
   };
 }
 
+function inferDeclarationName(text: string) {
+  const methodMatch = text.match(/\b(?:public|private|protected|internal|static|virtual|override|sealed|async|readonly|partial|\s)+[\w<>\[\],?\s]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+  if (methodMatch) return methodMatch[1];
+
+  const typeMatch = text.match(/\b(?:class|struct|interface|enum)\s+([A-Za-z_][A-Za-z0-9_]*)/);
+  if (typeMatch) return typeMatch[1];
+
+  return undefined;
+}
+
 function fallback(filePath: string): BuriedItem[] {
   const abs = path.resolve(filePath);
   const src = fs.readFileSync(abs, 'utf8');
   const results: BuriedItem[] = [];
-  // Heuristic: find occurrences like [DeadCode(...)] using regex
-  // Accept DeadCode and DeadCodeAttribute, case-insensitive
-  const re = /\[(?:DeadCode|DeadCodeAttribute)\s*\(([^\)]*)\)\s*\]/gi;
+  // Heuristic: find C# attribute lists that contain DeadCode or DeadCodeAttribute.
+  const re = /\[([^\]]*(?:DeadCode|DeadCodeAttribute)[^\]]*)\]/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(src))) {
     const argsText = m[1] || '';
     const startIdx = m.index;
     const after = src.slice(m.index + m[0].length, m.index + m[0].length + 400);
-    const nameMatch = after.match(/([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    const name = inferDeclarationName(after) || 'unknown';
     const lineNumber = src.slice(0, startIdx).split('\n').length;
     const { expiry, reason, migration, ticket } = extractArgs(argsText || '');
     const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
-    const name = nameMatch ? nameMatch[1] : 'unknown';
     results.push({ filePath: abs, lineNumber, functionName: name, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
   }
   return results;
@@ -112,15 +120,15 @@ export function parseFile(filePath: string): BuriedItem[] {
     // If tree-sitter didn't find any names, fall back to textual heuristic
     if (!results.length) return fallback(filePath);
 
-    // Post-process unknown names
+    // Post-process unknown or attribute names.
     for (const r of results) {
-      if (r.functionName === 'unknown') {
+      if (r.functionName === 'unknown' || /^(DeadCode|DeadCodeAttribute)$/i.test(r.functionName)) {
         try {
           const lines = src.split('\n');
           const startIdx = Math.max(0, (r.lineNumber || 1) - 1);
           const window = lines.slice(startIdx, startIdx + 8).join('\n');
-          const m = window.match(/([A-Za-z0-9_]+)\s*\(/);
-          if (m) r.functionName = m[1];
+          const name = inferDeclarationName(window);
+          if (name) r.functionName = name;
         } catch (err) {
           // ignore
         }

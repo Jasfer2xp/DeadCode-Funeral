@@ -27,6 +27,8 @@
     "vsce": "^2.0.0"
   },
   "scripts": {
+      "generate-diffs": "ts-node scripts/generate_removal_diffs.ts",
+      "generate-diffs-cjs": "node scripts/generate_removal_diffs.cjs",
     "build": "tsc -p tsconfig.json",
     "test": "jest --config jest.config.cjs",
     "scan": "npx deadcode-funeral scan --path .",

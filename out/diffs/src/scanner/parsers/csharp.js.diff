@@ -1,0 +1,263 @@
+--- original
++++ modified
+ "use strict";
+-/**
++var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+- * C# parser using tree-sitter-c-sharp when available, with a safe fallback.
++    Object.defineProperty(o, "default", { enumerable: true, value: v });
+- *
++}) : function(o, v) {
+- * This scans for attribute nodes named `DeadCode` (or `DeadCodeAttribute`) and
++    o["default"] = v;
+- * extracts named arguments like expiry, reason, migration, ticket.
++});
+- */
++var __importStar = (this && this.__importStar) || (function () {
+-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
++    var ownKeys = function(o) {
+-    if (k2 === undefined) k2 = k;
++        ownKeys = Object.getOwnPropertyNames || function (o) {
+-    var desc = Object.getOwnPropertyDescriptor(m, k);
++            var ar = [];
+-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
++            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+-      desc = { enumerable: true, get: function() { return m[k]; } };
++            return ar;
+-    }
++        };
+-    Object.defineProperty(o, k2, desc);
++        return ownKeys(o);
+-}) : (function(o, m, k, k2) {
++    };
+-    if (k2 === undefined) k2 = k;
++    return function (mod) {
+-    o[k2] = m[k];
++        if (mod && mod.__esModule) return mod;
+-}));
++        var result = {};
+-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
++        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+-    Object.defineProperty(o, "default", { enumerable: true, value: v });
++        __setModuleDefault(result, mod);
+-}) : function(o, v) {
++        return result;
+-    o["default"] = v;
++    };
+-});
++})();
+-var __importStar = (this && this.__importStar) || (function () {
++Object.defineProperty(exports, "__esModule", { value: true });
+-    var ownKeys = function(o) {
++exports.parseFile = parseFile;
+-        ownKeys = Object.getOwnPropertyNames || function (o) {
++const fs = __importStar(require("fs"));
+-            var ar = [];
++const path = __importStar(require("path"));
+-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
++function extractArgs(text) {
+-            return ar;
++    const pick = (key) => {
+-        };
++        const pattern = `${key}\\s*[:=]?\\s*\\"([^\\"]+)\\"`;
+-        return ownKeys(o);
++        const re = new RegExp(pattern, 'i');
+-    };
++        const m = text.match(re);
+-    return function (mod) {
++        return m ? m[1] : undefined;
+-        if (mod && mod.__esModule) return mod;
++    };
+-        var result = {};
++    return {
+-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
++        expiry: pick('expiry'),
+-        __setModuleDefault(result, mod);
++        reason: pick('reason'),
+-        return result;
++        migration: pick('migration'),
+-    };
++        ticket: pick('ticket'),
+-})();
++    };
+-Object.defineProperty(exports, "__esModule", { value: true });
++}
+-exports.parseFile = parseFile;
++function fallback(filePath) {
+-const fs = __importStar(require("fs"));
++    const abs = path.resolve(filePath);
+-const path = __importStar(require("path"));
++    const src = fs.readFileSync(abs, 'utf8');
+-function extractArgs(text) {
++    const results = [];
+-    const pick = (key) => {
++    const re = /\[DeadCode\s*\(([^\)]*)\)\]\s*(?:public|private|protected|internal)?\s*(?:static)?\s*(?:[\w<>\[\]]+\s+)?([A-Za-z0-9_]+)\s*\(/g;
+-        const pattern = `${key}\\s*[:=]?\\s*\\"([^\\"]+)\\"`;
++    let m;
+-        const re = new RegExp(pattern, 'i');
++    while ((m = re.exec(src))) {
+-        const m = text.match(re);
++        const args = m[1];
+-        return m ? m[1] : undefined;
++        const name = m[2];
+-    };
++        const lineNumber = src.slice(0, m.index).split('\n').length;
+-    return {
++        const { expiry, reason, migration, ticket } = extractArgs(args);
+-        expiry: pick('expiry'),
++        const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
+-        reason: pick('reason'),
++        results.push({ filePath: abs, lineNumber, functionName: name, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
+-        migration: pick('migration'),
++    }
+-        ticket: pick('ticket'),
++    return results;
+-    };
++}
+-}
++function parseFile(filePath) {
+-function fallback(filePath) {
++    try {
+-    const abs = path.resolve(filePath);
++        // eslint-disable-next-line @typescript-eslint/no-var-requires
+-    const src = fs.readFileSync(abs, 'utf8');
++        const Parser = require('tree-sitter');
+-    const results = [];
++        // eslint-disable-next-line @typescript-eslint/no-var-requires
+-    const re = /\[DeadCode\s*\(([^\)]*)\)\]\s*(?:public|private|protected|internal)?\s*(?:static)?\s*(?:[\w<>\[\]]+\s+)?([A-Za-z0-9_]+)\s*\(/g;
++        const CSharp = require('tree-sitter-c-sharp');
+-    let m;
++        const abs = path.resolve(filePath);
+-    while ((m = re.exec(src))) {
++        const src = fs.readFileSync(abs, 'utf8');
+-        const args = m[1];
++        const parser = new Parser();
+-        const name = m[2];
++        parser.setLanguage(CSharp);
+-        const lineNumber = src.slice(0, m.index).split('\n').length;
++        const tree = parser.parse(src);
+-        const { expiry, reason, migration, ticket } = extractArgs(args);
++        const results = [];
+-        const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
++        const visit = (node) => {
+-        results.push({ filePath: abs, lineNumber, functionName: name, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
++            if (!node)
+-    }
++                return;
+-    return results;
++            // attribute / attribute_list nodes may appear; look for attribute with name 'DeadCode'
+-}
++            if (node.type === 'attribute') {
+-function parseFile(filePath) {
++                const nameNode = node.childForFieldName && node.childForFieldName('name');
+-    try {
++                const name = nameNode ? src.slice(nameNode.startIndex, nameNode.endIndex) : '';
+-        // eslint-disable-next-line @typescript-eslint/no-var-requires
++                if (/DeadCode/i.test(name) || /DeadCodeAttribute/i.test(name)) {
+-        const Parser = require('tree-sitter');
++                    // The attribute's parent might be an attribute_list; find the declaration nearby
+-        // eslint-disable-next-line @typescript-eslint/no-var-requires
++                    let decl = node.parent;
+-        const CSharp = require('tree-sitter-c-sharp');
++                    while (decl && !/method_declaration|class_declaration|constructor_declaration|property_declaration|field_declaration/.test(decl.type)) {
+-        const abs = path.resolve(filePath);
++                        decl = decl.parent;
+-        const src = fs.readFileSync(abs, 'utf8');
++                    }
+-        const parser = new Parser();
++                    // fallback: try next named sibling if decl wasn't found
+-        parser.setLanguage(CSharp);
++                    if (!decl) {
+-        const tree = parser.parse(src);
++                        let sibling = node.nextNamedSibling;
+-        const results = [];
++                        while (sibling && !/method_declaration|class_declaration/.test(sibling.type))
+-        const visit = (node) => {
++                            sibling = sibling.nextNamedSibling;
+-            if (!node)
++                        decl = sibling;
+-                return;
++                    }
+-            // attribute / attribute_list nodes may appear; look for attribute with name 'DeadCode'
++                    let targetName = 'unknown';
+-            if (node.type === 'attribute') {
++                    let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
+-                const nameNode = node.childForFieldName && node.childForFieldName('name');
++                    if (decl) {
+-                const name = nameNode ? src.slice(nameNode.startIndex, nameNode.endIndex) : '';
++                        // attempt to extract identifier
+-                if (/DeadCode/i.test(name) || /DeadCodeAttribute/i.test(name)) {
++                        const id = decl.childForFieldName && decl.childForFieldName('name');
+-                    // The attribute's parent might be an attribute_list; find the declaration nearby
++                        if (id)
+-                    let decl = node.parent;
++                            targetName = src.slice(id.startIndex, id.endIndex);
+-                    while (decl && !/method_declaration|class_declaration|constructor_declaration|property_declaration|field_declaration/.test(decl.type)) {
++                        if (decl.startPosition)
+-                        decl = decl.parent;
++                            lineNumber = decl.startPosition.row + 1;
+                     }
+-                    // fallback: try next named sibling if decl wasn't found
++                    // extract argument text inside parentheses
+-                    if (!decl) {
++                    const argsNode = node.childForFieldName && node.childForFieldName('argument_list');
+-                        let sibling = node.nextNamedSibling;
++                    const argText = argsNode ? src.slice(argsNode.startIndex, argsNode.endIndex) : src.slice(node.startIndex, node.endIndex);
+-                        while (sibling && !/method_declaration|class_declaration/.test(sibling.type))
++                    const { expiry, reason, migration, ticket } = extractArgs(argText);
+-                            sibling = sibling.nextNamedSibling;
++                    const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
+-                        decl = sibling;
++                    results.push({ filePath: abs, lineNumber, functionName: targetName, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
+-                    }
++                }
+-                    let targetName = 'unknown';
++            }
+-                    let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
++            if (node.namedChildren && node.namedChildren.length) {
+-                    if (decl) {
++                for (const c of node.namedChildren)
+-                        // attempt to extract identifier
++                    visit(c);
+-                        const id = decl.childForFieldName && decl.childForFieldName('name');
++            }
+-                        if (id)
++        };
+-                            targetName = src.slice(id.startIndex, id.endIndex);
++        visit(tree.rootNode);
+-                        if (decl.startPosition)
++        return results;
+-                            lineNumber = decl.startPosition.row + 1;
++    }
+-                    }
++    catch (err) {
+-                    // extract argument text inside parentheses
++        // tree-sitter not available or parse error — fallback to regex-based parser
+-                    const argsNode = node.childForFieldName && node.childForFieldName('argument_list');
++        console.warn('tree-sitter-c-sharp unavailable or failed — falling back to heuristic parser.');
+-                    const argText = argsNode ? src.slice(argsNode.startIndex, argsNode.endIndex) : src.slice(node.startIndex, node.endIndex);
++        return fallback(filePath);
+-                    const { expiry, reason, migration, ticket } = extractArgs(argText);
++    }
+-                    const expiryDate = expiry ? new Date(expiry) : new Date(NaN);
++}
+-                    results.push({ filePath: abs, lineNumber, functionName: targetName, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
++exports.default = { parseFile };
+-                }
++
+-            }
+-            if (node.namedChildren && node.namedChildren.length) {
+-                for (const c of node.namedChildren)
+-                    visit(c);
+-            }
+-        };
+-        visit(tree.rootNode);
+-        return results;
+-    }
+-    catch (err) {
+-        // tree-sitter not available or parse error — fallback to regex-based parser
+-        console.warn('tree-sitter-c-sharp unavailable or failed — falling back to heuristic parser.');
+-        return fallback(filePath);
+-    }
+-}
+-exports.default = { parseFile };
+-

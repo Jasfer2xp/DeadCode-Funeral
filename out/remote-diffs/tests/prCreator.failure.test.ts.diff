@@ -1,0 +1,42 @@
+--- original
++++ modified
+ import { createDeletionPR } from '../src/github/prCreator';
+ import * as fs from 'fs';
+ import * as path from 'path';
+ 
+ jest.mock('simple-git', () => {
+   return jest.fn(() => ({
+     status: jest.fn().mockResolvedValue({ files: ['modified.js'] }),
+     getRemotes: jest.fn().mockResolvedValue([]),
+   }));
+ });
+ 
+ test('createDeletionPR aborts when working tree not clean', async () => {
+   const tmp = path.resolve('tmp_pr_creator_file2.js');
+-  fs.writeFileSync(tmp, '/** @funeral { expiry: "2020-01-01", reason: "x" } */\nfunction toRemove() {}');
++  const item: any = {
+-  const item: any = {
++    filePath: tmp,
+-    filePath: tmp,
++    lineNumber: 1,
+-    lineNumber: 1,
++    functionName: 'toRemove',
+-    functionName: 'toRemove',
++    language: 'javascript',
+-    language: 'javascript',
++    expiry: new Date('2020-01-01'),
+-    expiry: new Date('2020-01-01'),
++    reason: 'x',
+-    reason: 'x',
++  };
+-  };
++  const res = await createDeletionPR(item, { githubToken: 'token', owner: 'o', repo: 'r', root: '.' });
+-  const res = await createDeletionPR(item, { githubToken: 'token', owner: 'o', repo: 'r', root: '.' });
++  fs.unlinkSync(tmp);
+-  fs.unlinkSync(tmp);
++  expect(res).toBeNull();
+-  expect(res).toBeNull();
++});
+-});
++
+-

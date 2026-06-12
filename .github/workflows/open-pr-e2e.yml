@@ -1,0 +1,32 @@
+name: E2E Open PR (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      doRealRun:
+        description: 'Set to true to perform real PR creation (requires secrets and push rights)'
+        required: false
+        default: 'false'
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm ci
+      - name: Run open-pr (dry or real)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event.inputs.doRealRun }}" = "true" ]; then
+            echo "Running real open-pr (ensure secrets and permissions are set)"
+            npx ts-node --transpile-only src/cli/index.ts open-pr --path . --token "$GITHUB_TOKEN"
+          else
+            echo "Dry run: will not push or create PRs"
+            npx ts-node --transpile-only src/cli/index.ts open-pr --path . --token "$GITHUB_TOKEN" --dry-run
+          fi

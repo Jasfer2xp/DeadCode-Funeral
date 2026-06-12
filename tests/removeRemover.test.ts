@@ -20,4 +20,14 @@ test('PHP remover deletes function following @funeral DocBlock or DeadCode attri
   const outAttr = removeBuriedCode(sourceAttr, itemAttr);
   expect(outAttr).not.toContain('old_attr');
   expect(outAttr).toContain('keep2');
+
+  // PHP: attribute list with multiple attributes on same line
+  const sourceAttrMulti = `#[Other]
+#[DeadCode(expiry: "2020-01-01", reason: "x")]
+function old_attr2() { return 1; }
+function keep3() { return 2; }`;
+  const itemAttrMulti: any = { filePath: 'tmp.php', lineNumber: 2, functionName: 'old_attr2', language: 'php', expiry: new Date('2020-01-01'), reason: 'x' };
+  const outAttrMulti = removeBuriedCode(sourceAttrMulti, itemAttrMulti);
+  expect(outAttrMulti).not.toContain('old_attr2');
+  expect(outAttrMulti).toContain('keep3');
 });

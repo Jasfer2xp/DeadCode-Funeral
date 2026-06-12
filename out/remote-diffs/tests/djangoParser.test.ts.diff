@@ -1,0 +1,26 @@
+--- original
++++ modified
+ import { parseFile } from '../src/scanner/parsers/python';
+ import * as fs from 'fs';
+ 
+ test('python (Django) parser finds @bury on class and function', () => {
+   const tmp = 'tmp_test_django.py';
+-  const content = `@bury(expiry="2025-01-01", reason="deprecated")\nclass OldView:\n    pass\n\n@bury(expiry="2024-01-01", reason="old func")\ndef old_func():\n    pass\n`;
++  fs.writeFileSync(tmp, content);
+-  fs.writeFileSync(tmp, content);
++  const items = parseFile(tmp as any);
+-  const items = parseFile(tmp as any);
++  fs.unlinkSync(tmp);
+-  fs.unlinkSync(tmp);
++  // Expect at least one found; old_func should be detected
+-  // Expect at least one found; old_func should be detected
++  expect(items.length).toBeGreaterThanOrEqual(1);
+-  expect(items.length).toBeGreaterThanOrEqual(1);
++  const names = items.map(i => i.functionName);
+-  const names = items.map(i => i.functionName);
++  expect(names).toContain('old_func');
+-  expect(names).toContain('old_func');
++});
+-});
++
+-
