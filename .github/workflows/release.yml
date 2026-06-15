@@ -28,8 +28,11 @@ jobs:
         run: |
           npm run package:vsix || true
       - name: Publish VSIX to Marketplace
-        if: ${{ secrets.MARKETPLACE_TOKEN != '' }}
         env:
           MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
         run: |
-          npx vsce publish --pat $MARKETPLACE_TOKEN || echo 'VSCE publish failed or not configured.'
+          if [ -n "${MARKETPLACE_TOKEN}" ]; then
+            npx vsce publish --pat "$MARKETPLACE_TOKEN" || echo 'VSCE publish failed or not configured.'
+          else
+            echo "MARKETPLACE_TOKEN not provided; skipping VSIX publish"
+          fi
