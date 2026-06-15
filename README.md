@@ -4,7 +4,7 @@ Schedule your dead code for deletion. Automatically.
 
 Overview
 --------
-DeadCode Funeral scans a repository for structured "burial" annotations (JSDoc `@funeral`, C# `[DeadCode(...)]`, and Python `@bury`) and can automatically open GitHub PRs to remove expired dead code after verifying it is unused. All deletions are logged to `GRAVEYARD.md`.
+DeadCode Funeral scans a repository for structured "burial" annotations (JSDoc/DocBlock `@funeral`, C# `[DeadCode(...)]`, PHP `#[DeadCode(...)]`, and Python `@bury`) and can automatically open GitHub PRs to remove expired dead code after verifying it is unused. All deletions are logged to `GRAVEYARD.md`.
 
 Quick start
 -----------
@@ -55,9 +55,12 @@ npm test
 
 Notes & Safety
 --------------
-- The tool never silently deletes code — every deletion goes through a PR.
-- The PR creator checks the working tree is clean before making commits and aborts if a change would remove a large portion of a file (>50%).
-- Tree-sitter is used where available for AST-accurate parsing; robust textual fallbacks are provided so the scanner works even without native parsers installed.
+- The tool never silently deletes code — every deletion goes through a Pull Request.
+- The PR creator checks that the working tree is clean before making commits and aborts if a change would remove more than 250 lines or a large portion of a file (>50%).
+- **Python Indentation-Aware Scope Deletion**: Unlike brace-based languages, Python code removal is indentation-aware. The tool automatically detects the declaration's indentation and removes its entire block cleanly.
+- **Improved Reference Checking**: The usage checker matches token word boundaries (`\bSymbolName\b`) rather than just function call syntax (`\bSymbolName\(`). This ensures that callbacks, imports, and references in routing files (e.g. Django urls or Laravel routes) are detected, preventing false deletions.
+- **Automatic Ignored Paths**: Built-in ignores cover `node_modules`, `.git`, `bin`, `obj`, `dist`, and `out` directories by default to optimize scan times and prevent scanning built code.
+- Tree-sitter is used where available for AST-accurate parsing; robust textual fallbacks are provided so the scanner works even without native parsers installed. Warnings about missing tree-sitter packages are limited to print only once per execution.
 
 Optional: enabling AST-accurate removals (recommended)
 ----------------------------------------------------
