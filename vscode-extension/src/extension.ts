@@ -56,8 +56,8 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Try to require the workspace scanner and prCreator modules to run in-process and use Octokit
       try {
-        const scannerPath = path.join(workspace.uri.fsPath, 'src', 'scanner', 'index.js');
-        const prCreatorPath = path.join(workspace.uri.fsPath, 'src', 'github', 'prCreator.js');
+        const scannerPath = path.join(workspace.uri.fsPath, 'dist', 'scanner', 'index.js');
+        const prCreatorPath = path.join(workspace.uri.fsPath, 'dist', 'github', 'prCreator.js');
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const scanner = require(scannerPath);
         // eslint-disable-next-line @typescript-eslint/no-var-requires

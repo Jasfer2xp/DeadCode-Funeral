@@ -6,7 +6,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-export function parseFile(filePath) {
+function fallback(filePath) {
     const abs = path.resolve(filePath);
     const src = fs.readFileSync(abs, 'utf8');
     const results = [];
@@ -14,7 +14,7 @@ export function parseFile(filePath) {
     const attrRe = /#\s*\[\s*DeadCode\s*\(([^\)]*)\)\s*\]\s*(?:public\s+|protected\s+|private\s+)?(?:function\s+([A-Za-z0-9_]+)\s*\(|class\s+([A-Za-z0-9_]+)\b)/g;
     let m;
     while ((m = attrRe.exec(src))) {
-        const args = m[1];
+        const args = m[1] || '';
         const name = m[2] || m[3] || 'unknown';
         const lineNumber = src.slice(0, m.index).split('\n').length;
         const expiryMatch = args.match(/expiry\s*[:=]\s*["']([^"']+)["']/);
@@ -26,7 +26,7 @@ export function parseFile(filePath) {
     // Match DocBlock style /** @funeral { expiry: "2025-01-01", reason: "x" } */\nfunction name
     const docRe = /\/\*\*[\s\S]*?@funeral\s*\{([\s\S]*?)\}[\s\S]*?\*\/\s*(?:function\s+([A-Za-z0-9_]+)\s*\(|class\s+([A-Za-z0-9_]+)\b)/g;
     while ((m = docRe.exec(src))) {
-        const args = m[1];
+        const args = m[1] || '';
         const name = m[2] || m[3] || 'unknown';
         const lineNumber = src.slice(0, m.index).split('\n').length;
         const expiryMatch = args.match(/expiry\s*[:=]\s*["']([^"']+)["']/);
@@ -36,5 +36,83 @@ export function parseFile(filePath) {
         results.push({ filePath: abs, lineNumber, functionName: name, language: 'php', expiry, reason: reasonMatch ? reasonMatch[1] : '', ticket: ticketMatch ? ticketMatch[1] : undefined });
     }
     return results;
+}
+export function parseFile(filePath) {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const Parser = require('tree-sitter');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const PHP = require('tree-sitter-php');
+        const abs = path.resolve(filePath);
+        const src = fs.readFileSync(abs, 'utf8');
+        const parser = new Parser();
+        parser.setLanguage(PHP);
+        const tree = parser.parse(src);
+        const results = [];
+        const visit = (node) => {
+            if (!node)
+                return;
+            if (node.type === 'attribute') {
+                const text = src.slice(node.startIndex, node.endIndex);
+                if (/DeadCode/i.test(text)) {
+                    let decl = node.parent;
+                    while (decl && !/function_definition|class_declaration|method_declaration/.test(decl.type)) {
+                        decl = decl.parent;
+                    }
+                    let name = 'unknown';
+                    let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
+                    if (decl) {
+                        const idNode = decl.childForFieldName && decl.childForFieldName('name');
+                        if (idNode) {
+                            name = src.slice(idNode.startIndex, idNode.endIndex);
+                        }
+                        if (decl.startPosition) {
+                            lineNumber = decl.startPosition.row + 1;
+                        }
+                    }
+                    const expiryMatch = text.match(/expiry\s*[:=]\s*["']([^"']+)["']/);
+                    const reasonMatch = text.match(/reason\s*[:=]\s*["']([^"']+)["']/);
+                    const ticketMatch = text.match(/ticket\s*[:=]\s*["']([^"']+)["']/);
+                    const expiry = expiryMatch ? new Date(expiryMatch[1]) : new Date(NaN);
+                    results.push({ filePath: abs, lineNumber, functionName: name, language: 'php', expiry, reason: reasonMatch ? reasonMatch[1] : '', ticket: ticketMatch ? ticketMatch[1] : undefined });
+                }
+            }
+            if (node.type === 'comment') {
+                const text = src.slice(node.startIndex, node.endIndex);
+                if (/@funeral\b/i.test(text)) {
+                    let follow = node.nextSibling;
+                    let parent = node.parent;
+                    while (!follow && parent) {
+                        follow = parent.nextSibling;
+                        parent = parent.parent;
+                    }
+                    let name = 'unknown';
+                    let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
+                    if (follow) {
+                        const idNode = follow.childForFieldName && follow.childForFieldName('name');
+                        if (idNode) {
+                            name = src.slice(idNode.startIndex, idNode.endIndex);
+                        }
+                    }
+                    const expiryMatch = text.match(/expiry\s*[:=]\s*["']([^"']+)["']/);
+                    const reasonMatch = text.match(/reason\s*[:=]\s*["']([^"']+)["']/);
+                    const ticketMatch = text.match(/ticket\s*[:=]\s*["']([^"']+)["']/);
+                    const expiry = expiryMatch ? new Date(expiryMatch[1]) : new Date(NaN);
+                    results.push({ filePath: abs, lineNumber, functionName: name, language: 'php', expiry, reason: reasonMatch ? reasonMatch[1] : '', ticket: ticketMatch ? ticketMatch[1] : undefined });
+                }
+            }
+            if (node.namedChildren && node.namedChildren.length) {
+                for (const c of node.namedChildren)
+                    visit(c);
+            }
+        };
+        visit(tree.rootNode);
+        if (!results.length)
+            return fallback(filePath);
+        return results;
+    }
+    catch (err) {
+        return fallback(filePath);
+    }
 }
 export default { parseFile };

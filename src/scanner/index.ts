@@ -23,7 +23,7 @@ export interface ScanOptions {
   dryRun?: boolean;
 }
 
-const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**'];
+const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**', '**/dist/**', '**/out/**'];
 
 /**
  * Scan a folder for buried items

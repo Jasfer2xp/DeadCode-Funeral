@@ -11,7 +11,7 @@ import * as tsParser from './parsers/typescript.js';
 import * as pyParser from './parsers/python.js';
 import * as csParser from './parsers/csharp.js';
 import * as phpParser from './parsers/php.js';
-const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**'];
+const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**', '**/dist/**', '**/out/**'];
 /**
  * Scan a folder for buried items
  */

@@ -136,6 +136,50 @@ function removeJsTsBuriedCode(source: string, item: BuriedItem) {
   return removeLines(lines, Math.min(markerLine, declLine), findMatchingDeclarationEnd(lines, declLine));
 }
 
+function getIndentationLevel(line: string): number {
+  const match = line.match(/^(\s*)/);
+  return match ? match[1].length : 0;
+}
+
+function removePythonBuriedCode(source: string, item: BuriedItem) {
+  const lines = source.split('\n');
+  const reportedLine = Math.max(0, ((item as any).lineNumber || 1) - 1);
+  const decoratorLine = findNearbyLine(
+    lines,
+    reportedLine,
+    line => /@bury\b/i.test(line),
+  );
+
+  if (decoratorLine === -1) return source;
+
+  // Find the following class or def declaration line (allow some decorators between them)
+  const declLine = findFollowingDeclaration(lines, decoratorLine, /^\s*(?:class|def)\b/, 15);
+  if (declLine === -1) {
+    // Best effort: just remove the decorator line
+    return removeLines(lines, decoratorLine, decoratorLine);
+  }
+
+  const declIndentation = getIndentationLevel(lines[declLine]);
+
+  // Find the end of the block: the first non-empty, non-comment line following the declaration 
+  // that has an indentation level less than or equal to declIndentation.
+  let endLine = declLine;
+  for (let i = declLine + 1; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      continue;
+    }
+    const currentIndentation = getIndentationLevel(lines[i]);
+    if (currentIndentation <= declIndentation) {
+      endLine = i - 1;
+      break;
+    }
+    endLine = i;
+  }
+
+  return removeLines(lines, decoratorLine, endLine);
+}
+
 // Remove the buried declaration identified by scanner metadata. This remains
 // conservative: if the marker/declaration cannot be found, the source is left unchanged.
 export function removeBuriedCode(source: string, item: BuriedItem) {
@@ -144,6 +188,8 @@ export function removeBuriedCode(source: string, item: BuriedItem) {
       return removeCSharpBuriedCode(source, item);
     case 'php':
       return removePhpBuriedCode(source, item);
+    case 'python':
+      return removePythonBuriedCode(source, item);
     case 'typescript':
     case 'javascript':
       return removeJsTsBuriedCode(source, item);

@@ -31,3 +31,12 @@ function keep3() { return 2; }`;
   expect(outAttrMulti).not.toContain('old_attr2');
   expect(outAttrMulti).toContain('keep3');
 });
+
+test('Python remover deletes function following @bury decorator including its indented body', () => {
+  const source = `@bury(expiry="2020-01-01", reason="x")\ndef to_remove():\n    print("remove me")\n    return 1\n\ndef keep():\n    return 2`;
+  const item: any = { filePath: 'tmp.py', lineNumber: 1, functionName: 'to_remove', language: 'python', expiry: new Date('2020-01-01'), reason: 'x' };
+  const out = removeBuriedCode(source, item);
+  expect(out).not.toContain('to_remove');
+  expect(out).toContain('keep');
+  expect(out).not.toContain('print("remove me")');
+});

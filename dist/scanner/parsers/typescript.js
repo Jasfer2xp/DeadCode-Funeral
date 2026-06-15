@@ -49,6 +49,7 @@ function fallbackParse(filePath) {
     }
     return results;
 }
+let hasWarnedTreeSitter = false;
 export function parseFile(filePath) {
     // Try to require tree-sitter and the typescript grammar
     try {
@@ -135,7 +136,10 @@ export function parseFile(filePath) {
     }
     catch (err) {
         // If tree-sitter not available or parsing fails, fall back
-        console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
+        if (!hasWarnedTreeSitter) {
+            console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
+            hasWarnedTreeSitter = true;
+        }
         return fallbackParse(filePath);
     }
 }
