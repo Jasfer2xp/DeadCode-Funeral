@@ -10,11 +10,11 @@ import * as fs from 'fs';
 import * as glob from 'glob';
 import { execSync } from 'child_process';
 
-import * as tsParser from './parsers/typescript';
-import * as jsParser from './parsers/javascript';
-import * as pyParser from './parsers/python';
-import * as csParser from './parsers/csharp';
-import * as phpParser from './parsers/php';
+import * as tsParser from './parsers/typescript.js';
+import * as jsParser from './parsers/javascript.js';
+import * as pyParser from './parsers/python.js';
+import * as csParser from './parsers/csharp.js';
+import * as phpParser from './parsers/php.js';
 
 export type BuriedItem = tsParser.BuriedItem | pyParser.BuriedItem | csParser.BuriedItem | phpParser.BuriedItem;
 

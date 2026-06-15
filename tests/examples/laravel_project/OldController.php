@@ -1,5 +1,7 @@
 <?php
 /**
+ * @funeral {
+ *   expiry: "2024-06-01",
  *   reason: "migrate to new controller"
  * }
  */
@@ -7,3 +9,5 @@ class OldController {
     public function index() {}
 }
 
+#[DeadCode(expiry: "2023-01-01", reason: "old job")]
+function oldJob() {}

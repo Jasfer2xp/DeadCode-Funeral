@@ -6,7 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BuriedItem } from '../scanner/index';
+import type { BuriedItem } from '../scanner/index.js';
 
 export function appendRecord(item: BuriedItem, prNumber?: number, root: string = '.') {
   const gravePath = path.resolve(root, 'GRAVEYARD.md');

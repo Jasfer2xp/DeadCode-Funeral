@@ -14,7 +14,7 @@ export function checkUsage(root, definingFile, functionName) {
     const files = patterns.map((p) => glob.sync(p, { cwd: absRoot, absolute: true, ignore: IGNORES })).flat();
     const usages = [];
     const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
-    const nameRe = new RegExp(`\\b${escapeRegExp(functionName)}\\s*\\(`, 'g');
+    const nameRe = new RegExp(`\\b${escapeRegExp(functionName)}\\b`, 'g');
     for (const file of files) {
         if (path.resolve(file) === path.resolve(definingFile))
             continue;

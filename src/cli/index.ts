@@ -8,11 +8,11 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import * as scanner from '../scanner/index';
-import { checkUsage } from '../scanner/usageChecker';
-import { createDeletionPR } from '../github/prCreator';
-import { createWarningIssue } from '../github/issueCreator';
-import { appendRecord } from '../graveyard/logger';
+import * as scanner from '../scanner/index.js';
+import { checkUsage } from '../scanner/usageChecker.js';
+import { createDeletionPR } from '../github/prCreator.js';
+import { createWarningIssue } from '../github/issueCreator.js';
+import { appendRecord } from '../graveyard/logger.js';
 
 const program = new Command();
 

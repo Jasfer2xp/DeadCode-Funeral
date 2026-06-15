@@ -10,7 +10,7 @@ import { execSync } from 'child_process';
 import simpleGit from 'simple-git';
 import { Octokit } from '@octokit/rest';
 
-import type { BuriedItem } from '../scanner/index';
+import type { BuriedItem } from '../scanner/index.js';
 
 export interface PROptions {
   githubToken?: string;

@@ -7,10 +7,10 @@
 import * as path from 'path';
 import * as glob from 'glob';
 import { execSync } from 'child_process';
-import * as tsParser from './parsers/typescript';
-import * as pyParser from './parsers/python';
-import * as csParser from './parsers/csharp';
-import * as phpParser from './parsers/php';
+import * as tsParser from './parsers/typescript.js';
+import * as pyParser from './parsers/python.js';
+import * as csParser from './parsers/csharp.js';
+import * as phpParser from './parsers/php.js';
 const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**'];
 /**
  * Scan a folder for buried items

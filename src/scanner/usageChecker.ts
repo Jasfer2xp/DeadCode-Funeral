@@ -24,7 +24,7 @@ export function checkUsage(root: string, definingFile: string, functionName: str
   const usages: string[] = [];
 
     const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
-    const nameRe = new RegExp(`\\b${escapeRegExp(functionName)}\\s*\\(`, 'g');
+    const nameRe = new RegExp(`\\b${escapeRegExp(functionName)}\\b`, 'g');
 
   for (const file of files) {
     if (path.resolve(file) === path.resolve(definingFile)) continue;

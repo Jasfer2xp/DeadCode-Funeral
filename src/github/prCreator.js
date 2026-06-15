@@ -106,8 +106,10 @@ function removeCSharpBuriedCode(source, item) {
         return source;
     const declarationRe = /\b(?:public|private|protected|internal|static|virtual|override|sealed|async|readonly|partial|class|struct|interface|enum)\b|[A-Za-z_][A-Za-z0-9_<>?,\s\[\]]+\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/;
     const declLine = findFollowingDeclaration(lines, attrLine, declarationRe);
-    if (declLine === -1)
-        return removeLines(lines, attrLine, attrLine);
+    if (declLine === -1) {
+        // best-effort: if we can't find a declaration, remove the attribute line and the next line
+        return removeLines(lines, attrLine, Math.min(attrLine + 1, lines.length - 1));
+    }
     return removeLines(lines, attrLine, findMatchingDeclarationEnd(lines, declLine));
 }
 function removePhpBuriedCode(source, item) {
