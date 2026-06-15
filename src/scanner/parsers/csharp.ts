@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { customRequire } from '../requireHelper.js';
 
 export interface BuriedItem {
   filePath: string;
@@ -70,9 +71,9 @@ export function parseFile(filePath: string): BuriedItem[] {
   // not available or fails, fall back to the heuristic textual parser.
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Parser = require('tree-sitter');
+    const Parser = customRequire('tree-sitter');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const CSharp = require('tree-sitter-c-sharp');
+    const CSharp = customRequire('tree-sitter-c-sharp');
 
     const abs = path.resolve(filePath);
     const src = fs.readFileSync(abs, 'utf8');

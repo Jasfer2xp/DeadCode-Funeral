@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { customRequire } from '../requireHelper.js';
 
 export interface BuriedItem {
   filePath: string;
@@ -44,9 +45,9 @@ function fallback(filePath: string): BuriedItem[] {
 export function parseFile(filePath: string): BuriedItem[] {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Parser = require('tree-sitter');
+    const Parser = customRequire('tree-sitter');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Python = require('tree-sitter-python');
+    const Python = customRequire('tree-sitter-python');
 
     const abs = path.resolve(filePath);
     const src = fs.readFileSync(abs, 'utf8');

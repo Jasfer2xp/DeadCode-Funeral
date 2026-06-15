@@ -115,20 +115,24 @@
 -      if (expiry) {
 +
 -        const d = new Date(expiry);
-+export function parseFile(filePath: string): BuriedItem[] {
++let hasWarnedTreeSitter = false;
 -        if (!isNaN(d.getTime())) expiryDate = d;
-+  // Try to require tree-sitter and the typescript grammar
++
 -      }
-+  try {
++export function parseFile(filePath: string): BuriedItem[] {
 -      results.push({ filePath: abs, lineNumber, functionName, language: filePath.endsWith('.ts') ? 'typescript' : 'javascript', expiry: expiryDate, reason: reason || '', migration, ticket });
-+    // eslint-disable-next-line @typescript-eslint/no-var-requires
++  // Try to require tree-sitter and the typescript grammar
 -    }
-+    const Parser = require('tree-sitter');
++  try {
 -  }
-+    // tree-sitter-typescript exposes two grammars; prefer 'typescript'
--  return results;
 +    // eslint-disable-next-line @typescript-eslint/no-var-requires
+-  return results;
++    const Parser = require('tree-sitter');
 -}
++    // tree-sitter-typescript exposes two grammars; prefer 'typescript'
+-
++    // eslint-disable-next-line @typescript-eslint/no-var-requires
+-let hasWarnedTreeSitter = false;
 +    const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx;
  
 -export function parseFile(filePath: string): BuriedItem[] {
@@ -283,21 +287,28 @@
 -      // visit children
 +    // If tree-sitter not available or parsing fails, fall back
 -      if (node.namedChildren && node.namedChildren.length) {
-+    console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
++    if (!hasWarnedTreeSitter) {
 -        for (const c of node.namedChildren) visit(c);
-+    return fallbackParse(filePath);
++      console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
 -      }
-+  }
++      hasWarnedTreeSitter = true;
 -    };
-+}
- 
++    }
+-
++    return fallbackParse(filePath);
 -    visit(tree.rootNode);
-+export default { parseFile };
++  }
 -    return results;
-+
++}
 -  } catch (err) {
++
 -    // If tree-sitter not available or parsing fails, fall back
--    console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
++export default { parseFile };
+-    if (!hasWarnedTreeSitter) {
++
+-      console.warn('tree-sitter unavailable or failed — falling back to heuristic parser.');
+-      hasWarnedTreeSitter = true;
+-    }
 -    return fallbackParse(filePath);
 -  }
 -}

@@ -10,6 +10,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { customRequire } from '../requireHelper.js';
 
 export interface BuriedItem {
   filePath: string;
@@ -64,16 +65,40 @@ function fallbackParse(filePath: string): BuriedItem[] {
   return results;
 }
 
+function extractNameFromNode(node: any, src: string): string {
+  if (!node) return 'unknown';
+  const t = node.type;
+  if (t === 'function_declaration' || t === 'class_declaration' || t === 'method_definition') {
+    const id = node.childForFieldName && node.childForFieldName('name');
+    if (id) return src.slice(id.startIndex, id.endIndex);
+  }
+  if (t === 'lexical_declaration' || t === 'variable_declaration') {
+    const declarator = node.namedChildren && node.namedChildren.find((c: any) => c.type === 'variable_declarator');
+    if (declarator) {
+      return extractNameFromNode(declarator, src);
+    }
+  }
+  if (t === 'variable_declarator') {
+    const id = node.childForFieldName && node.childForFieldName('name');
+    if (id) return src.slice(id.startIndex, id.endIndex);
+  }
+  if (t === 'export_statement') {
+    const child = node.namedChildren && node.namedChildren[0];
+    if (child) return extractNameFromNode(child, src);
+  }
+  return 'unknown';
+}
+
 let hasWarnedTreeSitter = false;
 
 export function parseFile(filePath: string): BuriedItem[] {
   // Try to require tree-sitter and the typescript grammar
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Parser = require('tree-sitter');
+    const Parser = customRequire('tree-sitter');
     // tree-sitter-typescript exposes two grammars; prefer 'typescript'
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const TsGrammar = require('tree-sitter-typescript').typescript || require('tree-sitter-typescript').tsx;
+    const TsGrammar = customRequire('tree-sitter-typescript').typescript || customRequire('tree-sitter-typescript').tsx;
 
     const abs = path.resolve(filePath);
     const src = fs.readFileSync(abs, 'utf8');
@@ -109,26 +134,7 @@ export function parseFile(filePath: string): BuriedItem[] {
           let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
 
           if (follow) {
-            // check for function_declaration, method_definition, class_declaration, variable_declaration
-            const t = follow.type;
-            if (t === 'function_declaration' && follow.childForFieldName) {
-              const id = follow.childForFieldName('name');
-              if (id) name = src.slice(id.startIndex, id.endIndex);
-            } else if (t === 'class_declaration') {
-              const id = follow.childForFieldName('name');
-              if (id) name = src.slice(id.startIndex, id.endIndex);
-            } else if (t === 'lexical_declaration' || t === 'variable_declaration') {
-              // find identifier child
-              const id = follow.namedChildren && follow.namedChildren.find((c: any) => c.type === 'identifier');
-              if (id) name = src.slice(id.startIndex, id.endIndex);
-            } else if (t === 'export_statement') {
-              // try to look into export next
-              const child = follow.namedChildren && follow.namedChildren[0];
-              if (child && child.type === 'function_declaration') {
-                const id = child.childForFieldName && child.childForFieldName('name');
-                if (id) name = src.slice(id.startIndex, id.endIndex);
-              }
-            }
+            name = extractNameFromNode(follow, src);
           }
 
           let expiryDate: Date = new Date(NaN);

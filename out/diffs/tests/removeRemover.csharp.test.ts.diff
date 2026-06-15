@@ -1,0 +1,30 @@
+--- original
++++ modified
+ import { removeBuriedCode } from '../src/github/prCreator';
+ 
+ test('C# remover deletes method with DeadCode attribute', () => {
+   const src = `[DeadCode(expiry: "2020-01-01", reason: "x")]
+ public void OldMethod() { }
+ public void Keep() { }`;
+   const item: any = { filePath: 'tmp.cs', lineNumber: 1, functionName: 'OldMethod', language: 'csharp', expiry: new Date('2020-01-01'), reason: 'x' };
+   const out = removeBuriedCode(src, item);
+   expect(out).not.toContain('OldMethod');
+   expect(out).toContain('Keep');
+ });
+ 
+ test('C# remover deletes method when attribute is in list with others', () => {
+-  const src = `[Other, DeadCode(expiry: "2020-01-01", reason: "x")]
++  const item: any = { filePath: 'tmp.cs', lineNumber: 1, functionName: 'OldMethod2', language: 'csharp', expiry: new Date('2020-01-01'), reason: 'x' };
+-public void OldMethod2() { }
++  const out = removeBuriedCode(src, item);
+-public void Keep2() { }`;
++  expect(out).not.toContain('OldMethod2');
+-  const item: any = { filePath: 'tmp.cs', lineNumber: 1, functionName: 'OldMethod2', language: 'csharp', expiry: new Date('2020-01-01'), reason: 'x' };
++  expect(out).toContain('Keep2');
+-  const out = removeBuriedCode(src, item);
++});
+-  expect(out).not.toContain('OldMethod2');
++
+-  expect(out).toContain('Keep2');
+-});
+-

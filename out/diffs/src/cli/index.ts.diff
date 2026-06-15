@@ -19,15 +19,15 @@
 +  .option('--dry-run', 'Preview without action', false)
 -import chalk from 'chalk';
 +  .action((opts) => {
--import * as scanner from '../scanner/index';
+-import * as scanner from '../scanner/index.js';
 +    console.log(chalk.bold('⚰️  DeadCode Funeral — Scanning project...'));
--import { checkUsage } from '../scanner/usageChecker';
+-import { checkUsage } from '../scanner/usageChecker.js';
 +    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun });
--import { createDeletionPR } from '../github/prCreator';
+-import { createDeletionPR } from '../github/prCreator.js';
 +    if (!items.length) {
--import { createWarningIssue } from '../github/issueCreator';
+-import { createWarningIssue } from '../github/issueCreator.js';
 +      console.log('No buried items found.');
--import { appendRecord } from '../graveyard/logger';
+-import { appendRecord } from '../graveyard/logger.js';
 +      return;
 -
 +    }

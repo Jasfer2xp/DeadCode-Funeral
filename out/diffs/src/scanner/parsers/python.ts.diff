@@ -5,46 +5,188 @@
 - * Python parser stub
 +
 - * NOTE: For the initial implementation this is a simple heuristic parser
-+export default { parseFile };
++export function parseFile(filePath: string): BuriedItem[] {
 - * that looks for @bury(...) decorators. A full implementation would use a
-+
++  try {
 - * proper Python parser (tree-sitter-python) to reliably extract nodes.
++    // eslint-disable-next-line @typescript-eslint/no-var-requires
 - */
++    const Parser = require('tree-sitter');
 -
++    // eslint-disable-next-line @typescript-eslint/no-var-requires
 -import * as fs from 'fs';
++    const Python = require('tree-sitter-python');
 -import * as path from 'path';
++
 -
++    const abs = path.resolve(filePath);
 -export interface BuriedItem {
++    const src = fs.readFileSync(abs, 'utf8');
 -  filePath: string;
++    const parser = new Parser();
 -  lineNumber: number;
++    parser.setLanguage(Python);
 -  functionName: string;
++    const tree = parser.parse(src);
 -  language: 'python';
++    const results: BuriedItem[] = [];
 -  expiry: Date;
++
 -  reason: string;
++    const visit = (node: any) => {
 -  migration?: string;
++      if (!node) return;
 -  ticket?: string;
++      if (node.type === 'decorated_definition') {
 -  author?: string;
++        // Find any child decorator node that matches @bury
 -}
++        let buryDec: any = null;
 -
--export function parseFile(filePath: string): BuriedItem[] {
++        if (node.namedChildren) {
+-function fallback(filePath: string): BuriedItem[] {
++          for (const c of node.namedChildren) {
 -  const abs = path.resolve(filePath);
++            if (c.type === 'decorator') {
 -  const src = fs.readFileSync(abs, 'utf8');
++              const decText = src.slice(c.startIndex, c.endIndex);
 -  const results: BuriedItem[] = [];
++              if (/@bury\b/i.test(decText)) {
 -
++                buryDec = c;
 -  // Tight regex: @bury(...) followed by class or def (handles Django class-based views and functions)
++                break;
 -  const tightRe = /@bury\s*\(([^)]*)\)\s*(?:\r?\n|\s)*?(?:class|def)\s+([A-Za-z0-9_]+)/g;
++              }
 -  for (const m of Array.from(src.matchAll(tightRe))) {
--    const args = m[1];
++            }
+-    const args = m[1] || '';
++          }
 -    const name = m[2] || 'unknown';
++        }
 -    const lineNumber = src.slice(0, (m.index || 0)).split('\n').length;
++
 -    const expiryMatch = args.match(/expiry\s*=\s*["']([^"']+)["']/);
++        if (buryDec) {
 -    const reasonMatch = args.match(/reason\s*=\s*["']([^"']+)["']/);
++          // Find function or class child
 -    const ticketMatch = args.match(/ticket\s*=\s*["']([^"']+)["']/);
++          const targetNode = node.namedChildren && node.namedChildren.find((c: any) => c.type === 'function_definition' || c.type === 'class_definition');
 -    const expiry = expiryMatch ? new Date(expiryMatch[1]) : new Date(NaN);
++          let name = 'unknown';
 -    results.push({ filePath: abs, lineNumber, functionName: name, language: 'python', expiry, reason: reasonMatch ? reasonMatch[1] : '', ticket: ticketMatch ? ticketMatch[1] : undefined });
++          let lineNumber = buryDec.startPosition ? buryDec.startPosition.row + 1 : 0;
 -  }
++
 -
++          if (targetNode) {
 -  return results;
++            const idNode = targetNode.childForFieldName && targetNode.childForFieldName('name');
+-}
++            if (idNode) {
+-
++              name = src.slice(idNode.startIndex, idNode.endIndex);
+-export function parseFile(filePath: string): BuriedItem[] {
++            }
+-  try {
++            if (targetNode.startPosition) {
+-    // eslint-disable-next-line @typescript-eslint/no-var-requires
++              // use the start of the actual definition for cleaner references
+-    const Parser = require('tree-sitter');
++              lineNumber = targetNode.startPosition.row + 1;
+-    // eslint-disable-next-line @typescript-eslint/no-var-requires
++            }
+-    const Python = require('tree-sitter-python');
++          }
+ 
+-    const abs = path.resolve(filePath);
++          const decText = src.slice(buryDec.startIndex, buryDec.endIndex);
+-    const src = fs.readFileSync(abs, 'utf8');
++          const expiryMatch = decText.match(/expiry\s*=\s*["']([^"']+)["']/);
+-    const parser = new Parser();
++          const reasonMatch = decText.match(/reason\s*=\s*["']([^"']+)["']/);
+-    parser.setLanguage(Python);
++          const ticketMatch = decText.match(/ticket\s*=\s*["']([^"']+)["']/);
+-    const tree = parser.parse(src);
++          const expiry = expiryMatch ? new Date(expiryMatch[1]) : new Date(NaN);
+-    const results: BuriedItem[] = [];
++
+-
++          results.push({ filePath: abs, lineNumber, functionName: name, language: 'python', expiry, reason: reasonMatch ? reasonMatch[1] : '', ticket: ticketMatch ? ticketMatch[1] : undefined });
+-    const visit = (node: any) => {
++        }
+-      if (!node) return;
++      }
+-      if (node.type === 'decorated_definition') {
++
+-        // Find any child decorator node that matches @bury
++      if (node.namedChildren && node.namedChildren.length) {
+-        let buryDec: any = null;
++        for (const c of node.namedChildren) visit(c);
+-        if (node.namedChildren) {
++      }
+-          for (const c of node.namedChildren) {
++    };
+-            if (c.type === 'decorator') {
++
+-              const decText = src.slice(c.startIndex, c.endIndex);
++    visit(tree.rootNode);
+-              if (/@bury\b/i.test(decText)) {
++
+-                buryDec = c;
++    if (!results.length) return fallback(filePath);
+-                break;
++    return results;
+-              }
++  } catch (err) {
+-            }
++    return fallback(filePath);
+-          }
++  }
+-        }
++}
+ 
+-        if (buryDec) {
++export default { parseFile };
+-          // Find function or class child
++
+-          const targetNode = node.namedChildren && node.namedChildren.find((c: any) => c.type === 'function_definition' || c.type === 'class_definition');
+-          let name = 'unknown';
+-          let lineNumber = buryDec.startPosition ? buryDec.startPosition.row + 1 : 0;
+-
+-          if (targetNode) {
+-            const idNode = targetNode.childForFieldName && targetNode.childForFieldName('name');
+-            if (idNode) {
+-              name = src.slice(idNode.startIndex, idNode.endIndex);
+-            }
+-            if (targetNode.startPosition) {
+-              // use the start of the actual definition for cleaner references
+-              lineNumber = targetNode.startPosition.row + 1;
+-            }
+-          }
+-
+-          const decText = src.slice(buryDec.startIndex, buryDec.endIndex);
+-          const expiryMatch = decText.match(/expiry\s*=\s*["']([^"']+)["']/);
+-          const reasonMatch = decText.match(/reason\s*=\s*["']([^"']+)["']/);
+-          const ticketMatch = decText.match(/ticket\s*=\s*["']([^"']+)["']/);
+-          const expiry = expiryMatch ? new Date(expiryMatch[1]) : new Date(NaN);
+-
+-          results.push({ filePath: abs, lineNumber, functionName: name, language: 'python', expiry, reason: reasonMatch ? reasonMatch[1] : '', ticket: ticketMatch ? ticketMatch[1] : undefined });
+-        }
+-      }
+-
+-      if (node.namedChildren && node.namedChildren.length) {
+-        for (const c of node.namedChildren) visit(c);
+-      }
+-    };
+-
+-    visit(tree.rootNode);
+-
+-    if (!results.length) return fallback(filePath);
+-    return results;
+-  } catch (err) {
+-    return fallback(filePath);
+-  }
 -}
 -
 -export default { parseFile };

@@ -1,8 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { scan } from '../src/scanner/index';
-// require compiled JS for remover
-const prCreator = require(path.resolve(__dirname, '..', 'src', 'github', 'prCreator.js'));
+import { scan } from '../src/scanner/index.js';
+import prCreator from '../src/github/prCreator.js';
 
 function unifiedDiff(original: string, modified: string) {
   // Very small unified diff for review purposes
