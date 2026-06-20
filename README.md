@@ -4,20 +4,31 @@ Schedule your dead code for deletion. Automatically.
 
 Overview
 --------
-DeadCode Funeral scans a repository for structured "burial" annotations (JSDoc/DocBlock `@funeral`, C# `[DeadCode(...)]`, PHP `#[DeadCode(...)]`, and Python `@bury`) and can automatically open GitHub PRs to remove expired dead code after verifying it is unused. All deletions are logged to `GRAVEYARD.md`.
+DeadCode Funeral scans a repository for structured "burial" annotations (JSDoc/DocBlock `@funeral`, C# `[DeadCode(...)]`, PHP `#[DeadCode(...)]`, Python `@bury`, Go `// @funeral`, and Rust `// @funeral` or `#[dead_code_funeral]`) and can automatically open GitHub PRs to remove expired dead code after verifying it is unused. All deletions are logged to `GRAVEYARD.md`.
 
 Quick start
 -----------
-Install dependencies and build:
+Install globally via npm to make the `deadcode-funeral` command available globally:
 
 ```bash
-npm ci
-npm run build
+npm install -g deadcode-funeral
 ```
+
+Or install as a development dependency inside your project:
+
+```bash
+npm install --save-dev deadcode-funeral
+```
+
+### Usage
 
 Run a dry-run scan:
 
 ```bash
+# If installed globally:
+deadcode-funeral scan --path . --dry-run
+
+# If installed locally:
 npx deadcode-funeral scan --path . --dry-run
 ```
 
