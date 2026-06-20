@@ -19,9 +19,11 @@ program
     .description('Scan project and list all tagged items')
     .option('--path <path>', 'Path to scan', '.')
     .option('--dry-run', 'Preview without action', false)
+    .option('--ignore <patterns>', 'Comma-separated ignore glob patterns', '')
     .action((opts) => {
     console.log(chalk.bold('⚰️  DeadCode Funeral — Scanning project...'));
-    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun });
+    const ignoreList = opts.ignore ? opts.ignore.split(',').map((s) => s.trim()) : undefined;
+    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun, ignore: ignoreList });
     if (!items.length) {
         console.log('No buried items found.');
         return;
@@ -60,8 +62,10 @@ program
     .command('report')
     .description('Full report with expiry status')
     .option('--path <path>', 'Path to scan', '.')
+    .option('--ignore <patterns>', 'Comma-separated ignore glob patterns', '')
     .action((opts) => {
-    const items = scanner.scan({ root: opts.path });
+    const ignoreList = opts.ignore ? opts.ignore.split(',').map((s) => s.trim()) : undefined;
+    const items = scanner.scan({ root: opts.path, ignore: ignoreList });
     console.log(JSON.stringify(items, null, 2));
 });
 program
@@ -72,8 +76,10 @@ program
     .option('--owner <owner>', 'GitHub owner/org')
     .option('--repo <repo>', 'GitHub repository name')
     .option('--dry-run', 'Preview without action', false)
+    .option('--ignore <patterns>', 'Comma-separated ignore glob patterns', '')
     .action(async (opts) => {
-    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun });
+    const ignoreList = opts.ignore ? opts.ignore.split(',').map((s) => s.trim()) : undefined;
+    const items = scanner.scan({ root: opts.path, dryRun: opts.dryRun, ignore: ignoreList });
     const now = new Date();
     const expired = items.filter((i) => !isNaN(i.expiry.getTime()) && i.expiry.getTime() < now.getTime());
     if (!expired.length) {
@@ -109,8 +115,10 @@ program
     .option('--owner <owner>', 'GitHub owner/org')
     .option('--repo <repo>', 'GitHub repository')
     .option('--dry-run', 'Preview without action', false)
+    .option('--ignore <patterns>', 'Comma-separated ignore glob patterns', '')
     .action(async (opts) => {
-    const items = scanner.scan({ root: opts.path });
+    const ignoreList = opts.ignore ? opts.ignore.split(',').map((s) => s.trim()) : undefined;
+    const items = scanner.scan({ root: opts.path, ignore: ignoreList });
     const now = new Date();
     const days = parseInt(opts.days || '7', 10);
     const ms = days * 24 * 60 * 60 * 1000;

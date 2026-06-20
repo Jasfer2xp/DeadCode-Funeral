@@ -44,7 +44,13 @@
   },
   "main": "./out/extension.js",
   "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --watch",
     "package:vsix": "vsce package || true"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/vscode": "^1.70.0",
+    "esbuild": "^0.20.0"
+  }
 }

@@ -54,14 +54,16 @@ export function activate(context: vscode.ExtensionContext) {
       const out = vscode.window.createOutputChannel('DeadCode Funeral');
       out.show();
 
-      // Try to require the workspace scanner and prCreator modules to run in-process and use Octokit
+      // Try to dynamically import the workspace scanner and prCreator modules to run in-process
       try {
         const scannerPath = path.join(workspace.uri.fsPath, 'dist', 'scanner', 'index.js');
         const prCreatorPath = path.join(workspace.uri.fsPath, 'dist', 'github', 'prCreator.js');
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const scanner = require(scannerPath);
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const prCreator = require(prCreatorPath);
+        
+        const scannerUrl = 'file://' + (process.platform === 'win32' ? '/' + scannerPath.replace(/\\/g, '/') : scannerPath);
+        const prCreatorUrl = 'file://' + (process.platform === 'win32' ? '/' + prCreatorPath.replace(/\\/g, '/') : prCreatorPath);
+
+        const scanner = await import(scannerUrl);
+        const prCreator = await import(prCreatorUrl);
 
         out.appendLine('Running in-process scanner...');
         const items: any[] = scanner.scan({ root: workspace.uri.fsPath });

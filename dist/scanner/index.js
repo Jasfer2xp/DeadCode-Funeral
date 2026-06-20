@@ -5,6 +5,7 @@
  * - Returns a consolidated list of BuriedItem
  */
 import * as path from 'path';
+import * as fs from 'fs';
 import * as glob from 'glob';
 import { execFileSync } from 'child_process';
 import * as tsParser from './parsers/typescript.js';
@@ -17,10 +18,43 @@ const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**', '
  */
 export function scan(options = { root: '.' }) {
     const root = path.resolve(options.root || '.');
+    const activeIgnores = [...IGNORES];
+    // 1. Read .funeralignore
+    const ignoreFile = path.join(root, '.funeralignore');
+    if (fs.existsSync(ignoreFile)) {
+        try {
+            const content = fs.readFileSync(ignoreFile, 'utf8');
+            const lines = content.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0 && !line.startsWith('#'));
+            activeIgnores.push(...lines);
+        }
+        catch (err) {
+            // ignore read errors
+        }
+    }
+    // 2. Read deadcode-funeral.json
+    const configFile = path.join(root, 'deadcode-funeral.json');
+    if (fs.existsSync(configFile)) {
+        try {
+            const content = fs.readFileSync(configFile, 'utf8');
+            const json = JSON.parse(content);
+            if (json && Array.isArray(json.ignore)) {
+                activeIgnores.push(...json.ignore);
+            }
+        }
+        catch (err) {
+            // ignore config errors
+        }
+    }
+    // 3. Add custom ignores from options
+    if (options.ignore && Array.isArray(options.ignore)) {
+        activeIgnores.push(...options.ignore);
+    }
     // Find candidate files
     const patterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.cs', '**/*.php'];
     const files = patterns
-        .map((p) => glob.sync(p, { cwd: root, absolute: true, ignore: IGNORES }))
+        .map((p) => glob.sync(p, { cwd: root, absolute: true, ignore: activeIgnores }))
         .flat();
     const results = [];
     for (const file of files) {

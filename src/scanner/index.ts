@@ -15,12 +15,15 @@ import * as jsParser from './parsers/javascript.js';
 import * as pyParser from './parsers/python.js';
 import * as csParser from './parsers/csharp.js';
 import * as phpParser from './parsers/php.js';
+import * as goParser from './parsers/go.js';
+import * as rustParser from './parsers/rust.js';
 
-export type BuriedItem = tsParser.BuriedItem | pyParser.BuriedItem | csParser.BuriedItem | phpParser.BuriedItem;
+export type BuriedItem = tsParser.BuriedItem | pyParser.BuriedItem | csParser.BuriedItem | phpParser.BuriedItem | goParser.BuriedItem | rustParser.BuriedItem;
 
 export interface ScanOptions {
   root?: string;
   dryRun?: boolean;
+  ignore?: string[];
 }
 
 const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**', '**/dist/**', '**/out/**'];
@@ -31,10 +34,45 @@ const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**', '
 export function scan(options: ScanOptions = { root: '.' }): BuriedItem[] {
   const root = path.resolve(options.root || '.');
 
+  const activeIgnores = [...IGNORES];
+
+  // 1. Read .funeralignore
+  const ignoreFile = path.join(root, '.funeralignore');
+  if (fs.existsSync(ignoreFile)) {
+    try {
+      const content = fs.readFileSync(ignoreFile, 'utf8');
+      const lines = content.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('#'));
+      activeIgnores.push(...lines);
+    } catch (err) {
+      // ignore read errors
+    }
+  }
+
+  // 2. Read deadcode-funeral.json
+  const configFile = path.join(root, 'deadcode-funeral.json');
+  if (fs.existsSync(configFile)) {
+    try {
+      const content = fs.readFileSync(configFile, 'utf8');
+      const json = JSON.parse(content);
+      if (json && Array.isArray(json.ignore)) {
+        activeIgnores.push(...json.ignore);
+      }
+    } catch (err) {
+      // ignore config errors
+    }
+  }
+
+  // 3. Add custom ignores from options
+  if (options.ignore && Array.isArray(options.ignore)) {
+    activeIgnores.push(...options.ignore);
+  }
+
   // Find candidate files
-  const patterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.cs', '**/*.php'];
+  const patterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.cs', '**/*.php', '**/*.go', '**/*.rs'];
   const files = patterns
-    .map((p) => glob.sync(p, { cwd: root, absolute: true, ignore: IGNORES }))
+    .map((p) => glob.sync(p, { cwd: root, absolute: true, ignore: activeIgnores }))
     .flat();
 
   const results: BuriedItem[] = [];
@@ -52,6 +90,12 @@ export function scan(options: ScanOptions = { root: '.' }): BuriedItem[] {
         results.push(...parsed as any);
       } else if (file.endsWith('.cs')) {
         const parsed = csParser.parseFile(file);
+        results.push(...parsed as any);
+      } else if (file.endsWith('.go')) {
+        const parsed = goParser.parseFile(file);
+        results.push(...parsed as any);
+      } else if (file.endsWith('.rs')) {
+        const parsed = rustParser.parseFile(file);
         results.push(...parsed as any);
       }
     } catch (err) {

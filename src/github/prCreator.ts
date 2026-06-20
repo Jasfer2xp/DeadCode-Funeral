@@ -180,6 +180,54 @@ function removePythonBuriedCode(source: string, item: BuriedItem) {
   return removeLines(lines, decoratorLine, endLine);
 }
 
+function removeGoBuriedCode(source: string, item: BuriedItem) {
+  const lines = source.split('\n');
+  const reportedLine = Math.max(0, ((item as any).lineNumber || 1) - 1);
+  const markerLine = findNearbyLine(
+    lines,
+    reportedLine,
+    line => /@funeral\b/i.test(line),
+  );
+
+  if (markerLine === -1) return source;
+
+  let startLine = markerLine;
+  while (startLine > 0 && lines[startLine - 1].trim().startsWith('//')) {
+    startLine--;
+  }
+
+  const declarationRe = /\b(?:func|type)\b/;
+  const declLine = findFollowingDeclaration(lines, markerLine, declarationRe);
+  if (declLine === -1) return removeLines(lines, startLine, markerLine);
+
+  return removeLines(lines, startLine, findMatchingDeclarationEnd(lines, declLine));
+}
+
+function removeRustBuriedCode(source: string, item: BuriedItem) {
+  const lines = source.split('\n');
+  const reportedLine = Math.max(0, ((item as any).lineNumber || 1) - 1);
+  const markerLine = findNearbyLine(
+    lines,
+    reportedLine,
+    line => /@funeral\b|#\s*\[\s*(?:dead_code_funeral|funeral)\b/i.test(line),
+  );
+
+  if (markerLine === -1) return source;
+
+  let startLine = markerLine;
+  if (lines[markerLine].trim().startsWith('//')) {
+    while (startLine > 0 && lines[startLine - 1].trim().startsWith('//')) {
+      startLine--;
+    }
+  }
+
+  const declarationRe = /\b(?:fn|struct|impl|enum)\b/;
+  const declLine = findFollowingDeclaration(lines, markerLine, declarationRe);
+  if (declLine === -1) return removeLines(lines, startLine, markerLine);
+
+  return removeLines(lines, startLine, findMatchingDeclarationEnd(lines, declLine));
+}
+
 // Remove the buried declaration identified by scanner metadata. This remains
 // conservative: if the marker/declaration cannot be found, the source is left unchanged.
 export function removeBuriedCode(source: string, item: BuriedItem) {
@@ -190,6 +238,10 @@ export function removeBuriedCode(source: string, item: BuriedItem) {
       return removePhpBuriedCode(source, item);
     case 'python':
       return removePythonBuriedCode(source, item);
+    case 'go':
+      return removeGoBuriedCode(source, item);
+    case 'rust':
+      return removeRustBuriedCode(source, item);
     case 'typescript':
     case 'javascript':
       return removeJsTsBuriedCode(source, item);
