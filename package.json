@@ -1,6 +1,6 @@
 {
   "name": "deadcode-funeral",
-  "version": "1.0.0",
+  "version": "1.0.7",
   "description": "Schedule your dead code for deletion. Automatically.",
   "bin": {
     "deadcode-funeral": "./dist/cli/index.js"
@@ -31,8 +31,8 @@
     "vsce": "^2.0.0"
   },
   "scripts": {
-      "generate-diffs": "node scripts/generate_removal_diffs.cjs",
-      "generate-diffs-cjs": "node scripts/generate_removal_diffs.cjs",
+    "generate-diffs": "node scripts/generate_removal_diffs.cjs",
+    "generate-diffs-cjs": "node scripts/generate_removal_diffs.cjs",
     "build": "tsc -p tsconfig.json",
     "test": "jest --config jest.config.cjs",
     "scan": "npx deadcode-funeral scan --path .",
