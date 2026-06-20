@@ -36,9 +36,11 @@ jobs:
           npm publish --access public --ignore-scripts
 
       - name: Package VSIX
+        continue-on-error: true
+        working-directory: vscode-extension
         run: |
-          cd vscode-extension && npm install && cd ..
-          npm run package:vsix || true
+          npm install
+          npx vsce package --out ../deadcode-funeral.vsix
 
       - name: Publish VSIX to Marketplace
         env:
