@@ -1,6 +1,7 @@
 // Simple action runner that shells out to the CLI. Inputs are read from
 // environment variables (INPUT_<name>) per GitHub Actions behavior.
-const { spawnSync } = require('child_process');
+import { spawnSync } from 'child_process';
+import process from 'process';
 
 const githubToken = process.env['INPUT_GITHUB-TOKEN'];
 const warnDays = process.env['INPUT_WARN-DAYS-BEFORE'] || '7';
