@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+vscode-extension/node_modules/
+
+# Build outputs
+dist/
+out/
+*.vsix
+*.tgz
+
+# Test artifacts
+tmp_*
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+
+# Logs
+npm-debug.log*
