@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # required for npm provenance
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -21,7 +21,10 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --ignore-scripts
+
+      - name: Build
+        run: npm run build
 
       - name: Run tests
         run: npm test --silent
@@ -30,7 +33,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm publish --access public --provenance
+          npm publish --access public --ignore-scripts
 
       - name: Package VSIX
         run: |

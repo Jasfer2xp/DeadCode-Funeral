@@ -40,7 +40,7 @@
     "open-pr": "npx deadcode-funeral open-pr --path .",
     "open-pr:dry": "npx deadcode-funeral open-pr --path . --dry-run",
     "build:action": "echo 'action entry is JS; no build required'",
-    "prepare": "npm run build",
+    "prepare": "echo 'skipping prepare build'",
     "prepublishOnly": "npm run build",
     "release": "npm run build && npm version patch -m \"chore(release): %s\"",
     "package:vsix": "cd vscode-extension && vsce package --out ../deadcode-funeral.vsix",
