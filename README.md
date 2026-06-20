@@ -1,10 +1,72 @@
 # DeadCode Funeral
 
+<p align="center">
+  <img src="assets/banner.png" alt="DeadCode Funeral Banner" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/deadcode-funeral"><img src="https://img.shields.io/npm/v/deadcode-funeral.svg?style=flat-square" alt="NPM Version"></a>
+  <a href="https://github.com/Jasfer2xp/DeadCode-Funeral/actions"><img src="https://img.shields.io/github/actions/workflow/status/Jasfer2xp/DeadCode-Funeral/publish.yml?branch=main&style=flat-square" alt="Build Status"></a>
+  <a href="https://github.com/Jasfer2xp/DeadCode-Funeral/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Jasfer2xp/DeadCode-Funeral.svg?style=flat-square" alt="License"></a>
+  <a href="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome"></a>
+</p>
+
 Schedule your dead code for deletion. Automatically.
 
 Overview
 --------
 DeadCode Funeral scans a repository for structured "burial" annotations (JSDoc/DocBlock `@funeral`, C# `[DeadCode(...)]`, PHP `#[DeadCode(...)]`, Python `@bury`, Go `// @funeral`, and Rust `// @funeral` or `#[dead_code_funeral]`) and can automatically open GitHub PRs to remove expired dead code after verifying it is unused. All deletions are logged to `GRAVEYARD.md`.
+
+```mermaid
+graph TD
+    A["✍️ Annotate function with @funeral (date, reason)"] --> B["🔍 Run deadcode-funeral (CI/CD or Local)"]
+    B --> C{"📅 Has the expiry date passed?"}
+    C -->|No| D["⏳ Keep code (Do nothing)"]
+    C -->|Yes| E{"❓ Is the function still referenced/used?"}
+    E -->|Yes| F["⚠️ Create GitHub Warning Issue (Keep code)"]
+    E -->|No| G["🧹 Automatically delete the code"]
+    G --> H["✈️ Open GitHub Pull Request for review"]
+    H --> I["📝 Log the deletion in GRAVEYARD.md"]
+```
+
+
+How it works
+------------
+
+### 1. Annotate your deprecating code
+Add a structured `@funeral` block above functions you want to retire. You can specify an expiry date, reason, support ticket, and migration guide:
+
+```typescript
+// @funeral { "expiry": "2026-06-01", "reason": "Legacy auth provider, use OAuth2 instead." }
+export function loginLegacy(user: string) {
+  // ...
+}
+```
+
+### 2. Run the scanner (CLI)
+Scan the repository to find expired code:
+```bash
+deadcode-funeral scan --path .
+```
+
+*Output:*
+```text
+⚰️  DeadCode Funeral — Scanning project...
+[EXPIRED] loginLegacy (expired 19 days ago)
+Checking references...
+No references found! Safe to bury.
+```
+
+### 3. Automatically Clean and Log
+The tool deletes the expired code, opens a GitHub PR for team review, and logs it to `GRAVEYARD.md`:
+
+```markdown
+# Graveyard
+
+- [x] Deleted `loginLegacy` (expired 2026-06-01) from `src/auth.ts` - Reason: Legacy auth provider, use OAuth2 instead.
+```
+
+---
 
 Quick start
 -----------
