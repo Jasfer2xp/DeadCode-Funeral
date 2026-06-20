@@ -6,7 +6,7 @@
  */
 import * as path from 'path';
 import * as glob from 'glob';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as tsParser from './parsers/typescript.js';
 import * as pyParser from './parsers/python.js';
 import * as csParser from './parsers/csharp.js';
@@ -50,10 +50,12 @@ export function scan(options = { root: '.' }) {
     // Populate author using `git blame` where possible. This is best-effort and
     // will not throw if git is not available.
     const getAuthorForLine = (filePath, lineNumber) => {
+        if (isNaN(lineNumber) || lineNumber <= 0)
+            return undefined;
         try {
             const rel = path.relative(root, filePath).replace(/\\/g, '/');
-            // Use porcelain format for predictable parsing
-            const out = execSync(`git -C "${root}" blame --line-porcelain -L ${lineNumber},${lineNumber} -- "${rel}"`, { encoding: 'utf8' });
+            // Use execFileSync to avoid command injection via filenames and save shell spawning overhead
+            const out = execFileSync('git', ['-C', root, 'blame', '--line-porcelain', '-L', `${lineNumber},${lineNumber}`, '--', rel], { encoding: 'utf8' });
             const lines = out.split('\n');
             const authorLine = lines.find(l => l.startsWith('author '));
             const authorMailLine = lines.find(l => l.startsWith('author-mail '));

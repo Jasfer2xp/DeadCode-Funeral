@@ -91,8 +91,8 @@ export function parseFile(filePath) {
                     results.push({ filePath: abs, lineNumber, functionName: targetName, language: 'csharp', expiry: expiryDate, reason: reason || '', migration, ticket });
                 }
             }
-            if (node.namedChildren && node.namedChildren.length) {
-                for (const c of node.namedChildren)
+            if (node.children && node.children.length) {
+                for (const c of node.children)
                     visit(c);
             }
         };

@@ -125,10 +125,6 @@ export function parseFile(filePath: string): BuriedItem[] {
             parent = parent.parent;
           }
 
-          // If still not found, try to find the next node in tree traversal
-          if (!follow) {
-            const all = tree.rootNode.descendantsOfType ? tree.rootNode.descendantsOfType('*') : null;
-          }
 
           let name = 'unknown';
           let lineNumber = node.startPosition ? node.startPosition.row + 1 : 0;
@@ -147,9 +143,9 @@ export function parseFile(filePath: string): BuriedItem[] {
         }
       }
 
-      // visit children
-      if (node.namedChildren && node.namedChildren.length) {
-        for (const c of node.namedChildren) visit(c);
+      // visit children (both named and anonymous to ensure we don't miss comments)
+      if (node.children && node.children.length) {
+        for (const c of node.children) visit(c);
       }
     };
 

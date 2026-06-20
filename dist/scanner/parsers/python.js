@@ -77,8 +77,8 @@ export function parseFile(filePath) {
                     results.push({ filePath: abs, lineNumber, functionName: name, language: 'python', expiry, reason: reasonMatch ? reasonMatch[1] : '', ticket: ticketMatch ? ticketMatch[1] : undefined });
                 }
             }
-            if (node.namedChildren && node.namedChildren.length) {
-                for (const c of node.namedChildren)
+            if (node.children && node.children.length) {
+                for (const c of node.children)
                     visit(c);
             }
         };

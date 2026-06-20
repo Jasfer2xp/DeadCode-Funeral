@@ -5,7 +5,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import simpleGit from 'simple-git';
 import { Octokit } from '@octokit/rest';
 const MAX_REMOVED_LINES = 250;
@@ -227,13 +227,25 @@ export async function createDeletionPR(item, options = {}) {
         await git.checkoutLocalBranch(branch);
         fs.writeFileSync(filePath, newSrc, 'utf8');
         try {
-            execSync(`npx prettier --write "${filePath}"`, { stdio: 'ignore' });
+            const prettierBin = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'prettier.cmd' : 'prettier');
+            if (fs.existsSync(prettierBin)) {
+                execFileSync(prettierBin, ['--write', filePath], { stdio: 'ignore' });
+            }
+            else {
+                execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['prettier', '--write', filePath], { stdio: 'ignore' });
+            }
         }
         catch (err) {
             // Formatter is optional.
         }
         try {
-            execSync(`npx eslint --fix "${filePath}"`, { stdio: 'ignore' });
+            const eslintBin = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'eslint.cmd' : 'eslint');
+            if (fs.existsSync(eslintBin)) {
+                execFileSync(eslintBin, ['--fix', filePath], { stdio: 'ignore' });
+            }
+            else {
+                execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['eslint', '--fix', filePath], { stdio: 'ignore' });
+            }
         }
         catch (err) {
             // Linter is optional.
