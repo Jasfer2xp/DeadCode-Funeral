@@ -12,6 +12,8 @@ import * as tsParser from './parsers/typescript.js';
 import * as pyParser from './parsers/python.js';
 import * as csParser from './parsers/csharp.js';
 import * as phpParser from './parsers/php.js';
+import * as goParser from './parsers/go.js';
+import * as rustParser from './parsers/rust.js';
 const IGNORES = ['**/node_modules/**', '**/.git/**', '**/bin/**', '**/obj/**', '**/dist/**', '**/out/**'];
 /**
  * Scan a folder for buried items
@@ -52,7 +54,7 @@ export function scan(options = { root: '.' }) {
         activeIgnores.push(...options.ignore);
     }
     // Find candidate files
-    const patterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.cs', '**/*.php'];
+    const patterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.cs', '**/*.php', '**/*.go', '**/*.rs'];
     const files = patterns
         .map((p) => glob.sync(p, { cwd: root, absolute: true, ignore: activeIgnores }))
         .flat();
@@ -73,6 +75,14 @@ export function scan(options = { root: '.' }) {
             }
             else if (file.endsWith('.cs')) {
                 const parsed = csParser.parseFile(file);
+                results.push(...parsed);
+            }
+            else if (file.endsWith('.go')) {
+                const parsed = goParser.parseFile(file);
+                results.push(...parsed);
+            }
+            else if (file.endsWith('.rs')) {
+                const parsed = rustParser.parseFile(file);
                 results.push(...parsed);
             }
         }
