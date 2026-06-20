@@ -1,0 +1,27 @@
+# Dev/test files — not needed by end users
+tests/
+src/
+out/
+scripts/
+docs/
+debug_remover.*
+
+# VS Code extension — published separately via VSIX
+vscode-extension/
+
+# GitHub Actions workflows — not needed in the npm package
+.github/
+
+# Build artifacts that aren't the main output
+*.diff
+*.tgz
+*.vsix
+
+# TypeScript config
+tsconfig*.json
+jest.config.cjs
+
+# Misc
+.vscode/
+*.md
+!README.md

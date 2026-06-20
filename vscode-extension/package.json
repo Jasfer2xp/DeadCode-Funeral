@@ -1,6 +1,8 @@
 {
   "name": "deadcode-funeral-vscode",
   "displayName": "DeadCode Funeral",
+  "description": "Schedule your dead code for deletion. Highlights @funeral-annotated functions and opens GitHub PRs to remove them.",
+  "version": "1.0.0",
   "publisher": "your-name",
   "engines": {
     "vscode": "^1.70.0"
